@@ -15,22 +15,8 @@ class ReceiverServer:
         self.configurations = configurations
 
         # Set up logging
-        log_FORMAT = '%(created)f -- %(levelname)s: %(message)s'
-        if configurations["loglevel"] == "debug":
-            log.basicConfig(
-                format=log_FORMAT,
-                datefmt='%m/%d/%Y %I:%M:%S %p',
-                level=log.DEBUG,
-            )
-            mp.log_to_stderr(log.DEBUG)
-        else:
-            log.basicConfig(
-                format=log_FORMAT,
-                datefmt='%m/%d/%Y %I:%M:%S %p',
-                level=log.INFO
-            )
-            mp.log_to_stderr(log.INFO)
-        
+        self.setup_logging()
+
         self.chunk_size = mp.Value("i", 1024*1024)
         self.cpus = mp.Manager().list()
         
@@ -49,6 +35,24 @@ class ReceiverServer:
         self.sock.listen(self.num_workers)
         self.process_status = mp.Array("i", [0 for _ in range(self.num_workers)])
         
+    def setup_logging(self):
+        """Set up logging configuration."""
+        log_FORMAT = '%(created)f -- %(levelname)s: %(message)s'
+        if self.configurations["loglevel"] == "debug":
+            log.basicConfig(
+                format=log_FORMAT,
+                datefmt='%m/%d/%Y %I:%M:%S %p',
+                level=log.DEBUG,
+            )
+            mp.log_to_stderr(log.DEBUG)
+        else:
+            log.basicConfig(
+                format=log_FORMAT,
+                datefmt='%m/%d/%Y %I:%M:%S %p',
+                level=log.INFO
+            )
+            mp.log_to_stderr(log.INFO)
+
     def start(self):
         iter = 0
         while iter < 1:
@@ -70,6 +74,9 @@ class ReceiverServer:
                     p.join(timeout=0.1)
                     
     def worker(self, sock, process_num):
+        # Configure logging in the child process
+        self.setup_logging()
+
         while True:
             try:
                 client, address = sock.accept()
@@ -121,6 +128,9 @@ class ReceiverServer:
                 log.error(str(e))
                 
     def report_throughput(self):
+        # Configure logging in the child process
+        self.setup_logging()
+
         time.sleep(1)
         while sum(self.process_status) > 0:
             t1 = time.time()
