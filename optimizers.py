@@ -8,11 +8,21 @@ import logging
 from abc import ABC, abstractmethod
 
 class OptimizerBase(ABC):
-    def __init__(self, configurations, logger, verbose=True):
+    def __init__(self, configurations, sample_transfer, logger, verbose=True):
         self.configurations = configurations
+        self.sample_transfer = sample_transfer
         self.logger = logger
         self.verbose = verbose
         self.max_thread_count = configurations.get("thread_limit", 1)
+    
+    def black_box_function_dummy(self, params):
+        """
+        The common black box function for all optimizers.
+        This can be overridden by any child class if needed.
+        """
+        self.logger.info(f"Executing black box function with params: {params}")
+        result = sum([x**2 - 17*x + 70 for x in params])  # Just an example, replace with your actual function logic
+        return result
     
     def black_box_function(self, params):
         """
@@ -20,7 +30,7 @@ class OptimizerBase(ABC):
         This can be overridden by any child class if needed.
         """
         self.logger.info(f"Executing black box function with params: {params}")
-        result = sum([x**2 - 9*x + 20 for x in params])  # Just an example, replace with your actual function logic
+        result = self.sample_transfer(params)
         return result
     
     def run_probe(self, concurrency, iteration_count):
@@ -326,7 +336,7 @@ def main():
     logger = logging.getLogger()
 
     # Run the optimizer with the black box function
-    optimizer = CGOptimizer(configurations, logger, verbose=True)
+    optimizer = GradientDescentOptimizer(configurations, logger, verbose=True)
     best_params = optimizer.optimize()
     logger.info(f"Optimization completed. Best parameters: {best_params}")
 
