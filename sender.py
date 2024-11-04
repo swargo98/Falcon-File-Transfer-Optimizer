@@ -120,7 +120,7 @@ def worker(process_id, q):
                 sock.connect((HOST, PORT))
 
                 if emulab_test:
-                    target, factor = 2500, 10
+                    target, factor = 50, 10
                     max_speed = (target * 1000 * 1000)/8
                     second_target, second_data_count = int(max_speed/factor), 0
 
@@ -134,6 +134,9 @@ def worker(process_id, q):
 
                     offset = file_offsets[file_id]
                     to_send = file_sizes[file_id] - offset
+
+                    log.debug("Process: {0}, File: {1}, Offset: {2}, To Send: {3}".format(
+                        process_id, file_names[file_id], offset, to_send))
 
                     if (to_send > 0) and (process_status[process_id] == 1):
                         filename = root + file_names[file_id]
@@ -357,6 +360,9 @@ def run_transfer():
     if file_incomplete.value > 0:
         normal_transfer(params)
 
+    log.info("Transfer Completed .... ")
+    log.info("Queue Size: {0}".format(q.qsize()))
+
 
 def report_throughput(start_time):
     global throughput_logs
@@ -446,6 +452,8 @@ if __name__ == '__main__':
     q = manager.Queue(maxsize=file_count)
     for i in range(file_count):
         q.put(i)
+
+    log.debug("File Count: {0}, Thread Limit: {1}".format(file_count, configurations["thread_limit"]))
 
     workers = [mp.Process(target=worker, args=(i, q)) for i in range(configurations["thread_limit"])]
     for p in workers:

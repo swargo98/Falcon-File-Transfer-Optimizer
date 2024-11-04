@@ -76,6 +76,13 @@ class SenderClient:
         for i in range(self.file_count):
             self.q.put(i)
 
+        # Log file information
+        log.info(f"Total Files: {self.file_count}, Total Size: {np.round(np.sum(self.file_sizes) / (1024 * 1024), 2)} MB")
+
+        # Log file names and sizes
+        for i in range(self.file_count):
+            log.info(f"File: {self.file_names[i]}, Size: {np.round(self.file_sizes[i] / (1024 * 1024), 2)} MB")
+
     def tcp_stats(self):
         """Collect TCP statistics."""
         start = time.time()

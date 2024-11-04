@@ -9,16 +9,23 @@ import numpy as np
 import psutil
 import multiprocessing as mp
 from config_receiver import configurations
+import datetime
 
 chunk_size = mp.Value("i", 1024*1024)
 cpus = mp.Manager().list()
 
 log_FORMAT = '%(created)f -- %(levelname)s: %(message)s'
+log_file = "logs/" + datetime.datetime.now().strftime("%m_%d_%Y_%H_%M_%S") + ".log"
+
 if configurations["loglevel"] == "debug":
     log.basicConfig(
         format=log_FORMAT,
         datefmt='%m/%d/%Y %I:%M:%S %p',
         level=log.DEBUG,
+        handlers=[
+            log.FileHandler(log_file),
+            log.StreamHandler()
+        ]
     )
 
     mp.log_to_stderr(log.DEBUG)
