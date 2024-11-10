@@ -1,4 +1,4 @@
-from scipy.optimize import minimize
+from scipy.optimize import minimize, differential_evolution
 import numpy as np
 
 class NetworkSystemSimulator:
@@ -24,29 +24,53 @@ class NetworkSystemSimulator:
         self.receiver_buffer_in_use = max(min(self.network_throughput_per_thread * network_thread - self.write_throughput_per_thread * self.write_thread, self.receiver_buffer_capacity), 0)
 
     def get_utility_value(self, threads):
-        read_thread, network_thread, write_thread = threads
+        read_thread, network_thread, write_thread = map(int, threads)
         self.read_thread = read_thread
         self.network_thread = network_thread
         self.write_thread = write_thread
 
-        read_throughput = min(self.read_throughput_per_thread * read_thread, self.read_bandwidth)
-        network_throughput = min(self.network_throughput_per_thread * network_thread, self.network_bandwidth)
-        write_throughput = min(self.write_throughput_per_thread * write_thread, self.write_bandwidth)
+        # sender buffer simulation
+        read_and_network_thread = np.lcm(int(read_thread), int(network_thread))
+        read_throughput = 0
+        network_throughput_sender = 0
+        sender_buffer_before = self.sender_buffer_in_use
 
-        # Flow chart shared by Dr. Md Arifuzzaman (should it be here?)
+        for i in range(read_and_network_thread):
+            if i % read_thread == 0 and self.sender_buffer_in_use < self.sender_buffer_capacity:
+                read_throughput_temp = min(self.read_throughput_per_thread, self.sender_buffer_capacity - self.sender_buffer_in_use)
+                read_throughput += min(read_throughput_temp, self.read_bandwidth-read_throughput)
+                self.sender_buffer_in_use += min(read_throughput_temp, self.read_bandwidth-read_throughput)
 
-        if read_throughput < network_throughput:
-            network_throughput = read_throughput
-        elif self.sender_buffer_in_use == self.sender_buffer_capacity:
-            read_throughput = network_throughput
+            if i % network_thread == 0 and self.sender_buffer_in_use > 0:
+                network_throughput_temp = min(self.network_throughput_per_thread, self.sender_buffer_in_use)
+                network_throughput_sender += min(network_throughput_temp, self.network_bandwidth - network_throughput_sender)
+                self.sender_buffer_in_use -= min(network_throughput_temp, self.network_bandwidth - network_throughput_sender)
 
-        if write_throughput > network_throughput:
-            write_throughput = network_throughput
-        elif self.receiver_buffer_in_use == self.receiver_buffer_capacity:
-            network_throughput = write_throughput
+        # receiver buffer simulation
+        network_and_write_thread = np.lcm(int(network_thread), int(write_thread))
+        write_throughput = 0
+        network_throughput_receiver = 0
+        receiver_buffer_before = self.receiver_buffer_in_use
 
-        self.sender_buffer_in_use += read_throughput - network_throughput
-        self.receiver_buffer_in_use += network_throughput - write_throughput
+        for i in range(network_and_write_thread):
+            if i % network_thread == 0 and self.receiver_buffer_in_use < self.receiver_buffer_capacity:
+                network_throughput_temp = min(self.network_throughput_per_thread, self.receiver_buffer_capacity - self.receiver_buffer_in_use)
+                network_throughput_receiver += min(network_throughput_temp, self.network_bandwidth - network_throughput_receiver)
+                self.receiver_buffer_in_use += min(network_throughput_temp, self.network_bandwidth - network_throughput_receiver)
+
+            if i % write_thread == 0 and self.receiver_buffer_in_use > 0:
+                write_throughput_temp = min(self.write_throughput_per_thread, self.receiver_buffer_in_use)
+                write_throughput += min(write_throughput_temp, self.write_bandwidth - write_throughput)
+                self.receiver_buffer_in_use -= min(write_throughput_temp, self.write_bandwidth - write_throughput)
+
+        network_throughput = min(network_throughput_sender, network_throughput_receiver)
+
+        if network_throughput == network_throughput_sender:
+            write_throughput = min(write_throughput, network_throughput + receiver_buffer_before)
+            self.receiver_buffer_in_use = max(receiver_buffer_before - write_throughput, 0)
+        else:
+            read_throughput = min(read_throughput, network_throughput + sender_buffer_before)
+            self.sender_buffer_in_use = max(sender_buffer_before - read_throughput, 0)
 
         self.sender_buffer_in_use = max(self.sender_buffer_in_use, 0)
         self.receiver_buffer_in_use = max(self.receiver_buffer_in_use, 0)
@@ -58,8 +82,20 @@ class NetworkSystemSimulator:
         return utility * -1
     
     def optimize_threads(self, init_threads=(1, 1, 1)):
-        result = minimize(self.get_utility_value, init_threads, method='CG')
-        optimal_threads = result.x
+        bounds = [(1, 10), (1, 10), (1, 10)]  # Adjust the upper bound as needed
+
+        result = differential_evolution(
+            self.get_utility_value,
+            bounds,
+            strategy='best1bin',
+            maxiter=1000,
+            popsize=15,
+            mutation=(0.5, 1),
+            recombination=0.7,
+            polish=True
+        )
+        
+        optimal_threads = np.round(result.x).astype(int)  # Ensure integer threads
         return optimal_threads
 
 # Example usage:
