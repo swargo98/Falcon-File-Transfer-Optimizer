@@ -1,5 +1,6 @@
-from scipy.optimize import minimize, differential_evolution
+from scipy.optimize import minimize, differential_evolution   
 import numpy as np
+from queue import PriorityQueue
 
 class NetworkSystemSimulator:
     def __init__(self, read_thread = 1, network_thread = 1, write_thread = 1, sender_buffer_capacity = 10, receiver_buffer_capacity = 10, read_throughput_per_thread = 3, write_throughput_per_thread = 3, network_throughput_per_thread = 1, read_bandwidth = 6, write_bandwidth = 6, network_bandwidth = 6, read_background_traffic = 0, write_background_traffic = 0, network_background_traffic = 0):
@@ -23,41 +24,95 @@ class NetworkSystemSimulator:
         self.sender_buffer_in_use = max(min(self.read_throughput_per_thread * read_thread - self.network_throughput_per_thread * self.network_thread, self.sender_buffer_capacity), 0)
         self.receiver_buffer_in_use = max(min(self.network_throughput_per_thread * network_thread - self.write_throughput_per_thread * self.write_thread, self.receiver_buffer_capacity), 0)
 
+    def read_thread_task(self, time):
+        read_throughput_temp = 0
+        # print(f"Read Thread start: Sender Buffer: {self.sender_buffer_in_use}, Receiver Buffer: {self.receiver_buffer_in_use}")
+        if self.sender_buffer_in_use < self.sender_buffer_capacity:
+            read_throughput_temp = min(self.read_throughput_per_thread, self.sender_buffer_capacity - self.sender_buffer_in_use)
+            throughput_increase = min(read_throughput_temp, self.read_bandwidth-self.read_throughput)
+            self.read_throughput += throughput_increase
+            self.sender_buffer_in_use += throughput_increase
+
+        time_taken = read_throughput_temp / self.read_throughput_per_thread
+        next_time = time + time_taken + 0.00001
+        if next_time < 1:
+            self.thread_queue.put((next_time, "read"))
+        # print(f"Read Thread end: Sender Buffer: {self.sender_buffer_in_use}, Receiver Buffer: {self.receiver_buffer_in_use}")
+        return next_time
+
+    def network_thread_task(self, time):
+        network_throughput_temp = 0
+        if self.sender_buffer_in_use > 0 and self.receiver_buffer_in_use < self.receiver_buffer_capacity:
+            network_throughput_temp = min(self.network_throughput_per_thread, self.sender_buffer_in_use, self.receiver_buffer_capacity - self.receiver_buffer_in_use)
+            throughput_increase = min(network_throughput_temp, self.network_bandwidth-self.network_throughput)
+            self.network_throughput += throughput_increase
+            self.sender_buffer_in_use -= throughput_increase
+            self.receiver_buffer_in_use += throughput_increase
+
+        time_taken = network_throughput_temp / self.network_throughput_per_thread
+        next_time = time + time_taken + 0.00001
+        if next_time < 1:
+            self.thread_queue.put((next_time, "network"))
+        # print(f"Network Thread: Network Throughput: {network_throughput_temp}, Sender Buffer: {self.sender_buffer_in_use}, Receiver Buffer: {self.receiver_buffer_in_use}")
+        return next_time
+
+    def write_thread_task(self, time):
+        write_throughput_temp = 0
+        if self.receiver_buffer_in_use > 0:
+            write_throughput_temp = min(self.write_throughput_per_thread, self.receiver_buffer_in_use)
+            throughput_increase = min(write_throughput_temp, self.write_bandwidth-self.write_throughput)
+            self.write_throughput += throughput_increase
+            self.receiver_buffer_in_use -= throughput_increase
+
+        time_taken = write_throughput_temp / self.write_throughput_per_thread
+        next_time = time + time_taken + 0.00001
+        if next_time < 1:
+            self.thread_queue.put((next_time, "write"))
+        # print(f"Write Thread: Sender Buffer: {self.sender_buffer_in_use}, Receiver Buffer: {self.receiver_buffer_in_use}")
+        return next_time
+    
     def get_utility_value(self, threads):
         read_thread, network_thread, write_thread = map(int, threads)
         self.read_thread = read_thread
         self.network_thread = network_thread
         self.write_thread = write_thread
 
-        loop_counter = np.lcm.reduce([read_thread, network_thread, write_thread])
+        self.thread_queue = PriorityQueue() # Key: time, Value: thread_type
+        self.read_throughput = 0
+        self.network_throughput = 0
+        self.write_throughput = 0
 
-        read_throughput = 0
-        network_throughput = 0
-        write_throughput = 0
+        # populate the thread queue
+        for i in range(read_thread):
+            self.thread_queue.put((0, "read"))
+        for i in range(network_thread):
+            self.thread_queue.put((0, "network"))
+        for i in range(write_thread):
+            self.thread_queue.put((0, "write"))
 
-        for i in range(loop_counter):
-            if i % read_thread == 0 and self.sender_buffer_in_use < self.sender_buffer_capacity:
-                read_throughput_temp = min(self.read_throughput_per_thread, self.sender_buffer_capacity - self.sender_buffer_in_use)
-                read_throughput += min(read_throughput_temp, self.read_bandwidth-read_throughput)
-                self.sender_buffer_in_use += min(read_throughput_temp, self.read_bandwidth-read_throughput)
+        read_thread_finish_time = 0
+        network_thread_finish_time = 0
+        write_thread_finish_time = 0
 
-            if i % network_thread == 0 and self.sender_buffer_in_use > 0 and self.receiver_buffer_in_use < self.receiver_buffer_capacity:
-                network_throughput_temp = min(self.network_throughput_per_thread, self.sender_buffer_in_use, self.receiver_buffer_capacity - self.receiver_buffer_in_use)
-                network_throughput += min(network_throughput_temp, self.network_bandwidth-network_throughput)
-                self.sender_buffer_in_use -= min(network_throughput_temp, self.network_bandwidth-network_throughput)
-                self.receiver_buffer_in_use += min(network_throughput_temp, self.network_bandwidth-network_throughput)
+        while not self.thread_queue.empty():
+            time, thread_type = self.thread_queue.get()
+            if thread_type == "read":
+                read_thread_finish_time = self.read_thread_task(time)
+            elif thread_type == "network":
+                network_thread_finish_time = self.network_thread_task(time)
+            elif thread_type == "write":
+                write_thread_finish_time = self.write_thread_task(time)
 
-            if i % write_thread == 0 and self.receiver_buffer_in_use > 0:
-                write_throughput_temp = min(self.write_throughput_per_thread, self.receiver_buffer_in_use)
-                write_throughput += min(write_throughput_temp, self.write_bandwidth-write_throughput)
-                self.receiver_buffer_in_use -= min(write_throughput_temp, self.write_bandwidth-write_throughput)
+        self.read_throughput = self.read_throughput / read_thread_finish_time
+        self.network_throughput = self.network_throughput / network_thread_finish_time
+        self.write_throughput = self.write_throughput / write_thread_finish_time
         
         self.sender_buffer_in_use = max(self.sender_buffer_in_use, 0)
         self.receiver_buffer_in_use = max(self.receiver_buffer_in_use, 0)
 
-        utility = (read_throughput/self.K ** read_thread) + (network_throughput/self.K ** network_thread) + (write_throughput/self.K ** write_thread)
+        utility = (self.read_throughput/self.K ** read_thread) + (self.network_throughput/self.K ** network_thread) + (self.write_throughput/self.K ** write_thread)
 
-        print(f"Read thread: {read_thread}, Network thread: {network_thread}, Write thread: {write_thread}, Utility: {utility}, Read throughput: {read_throughput}, Network throughput: {network_throughput}, Write throughput: {write_throughput}")
+        print(f"Read thread: {read_thread}, Network thread: {network_thread}, Write thread: {write_thread}, Utility: {utility}, Read throughput: {self.read_throughput}, Sender Buffer: {self.sender_buffer_in_use}, Network throughput: {self.network_throughput}, Receiver Buffer: {self.receiver_buffer_in_use}, Write throughput: {self.write_throughput}")
 
         return utility * -1
     
@@ -82,3 +137,4 @@ class NetworkSystemSimulator:
 simulator = NetworkSystemSimulator()
 optimal_threads = simulator.optimize_threads()
 print(f"Optimal threads: Read={(optimal_threads[0])}, Network={(optimal_threads[1])}, Write={(optimal_threads[2])}")
+# simulator.get_utility_value([2, 3, 2])
