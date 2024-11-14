@@ -2,6 +2,10 @@ from scipy.optimize import minimize, differential_evolution
 import numpy as np
 from queue import PriorityQueue
 
+from skopt.space import Integer
+from skopt import Optimizer
+import time
+
 class NetworkSystemSimulator:
     def __init__(self, read_thread = 1, network_thread = 1, write_thread = 1, sender_buffer_capacity = 10, receiver_buffer_capacity = 10, read_throughput_per_thread = 3, write_throughput_per_thread = 1, network_throughput_per_thread = 2, read_bandwidth = 6, write_bandwidth = 6, network_bandwidth = 6, read_background_traffic = 0, write_background_traffic = 0, network_background_traffic = 0, track_states = False):
         self.sender_buffer_capacity = sender_buffer_capacity
@@ -56,7 +60,6 @@ class NetworkSystemSimulator:
 
     def network_thread_task(self, time):
         throughput_increase = 0
-        # print(f"Network Thread start: Network Throughput: {throughput_increase}, Sender Buffer: {self.sender_buffer_in_use}, Receiver Buffer: {self.receiver_buffer_in_use}")
         if self.sender_buffer_in_use > 0 and self.receiver_buffer_in_use < self.receiver_buffer_capacity:
             network_throughput_temp = min(self.network_throughput_per_thread, self.sender_buffer_in_use, self.receiver_buffer_capacity - self.receiver_buffer_in_use)
             throughput_increase = min(network_throughput_temp, self.network_bandwidth-self.network_throughput)
@@ -68,7 +71,7 @@ class NetworkSystemSimulator:
         next_time = time + time_taken + 0.00001
         if next_time < 1:
             self.thread_queue.put((next_time, "network"))
-        # print(f"Network Thread end: Network Throughput: {throughput_increase}, Sender Buffer: {self.sender_buffer_in_use}, Receiver Buffer: {self.receiver_buffer_in_use}")
+        
         if throughput_increase > 0 and self.track_states:
             with open('thread_level_states.csv', 'a') as f:
                 f.write(f"Network, {throughput_increase}, {self.sender_buffer_in_use}, {self.receiver_buffer_in_use}\n")
@@ -86,7 +89,7 @@ class NetworkSystemSimulator:
         next_time = time + time_taken + 0.00001
         if next_time < 1:
             self.thread_queue.put((next_time, "write"))
-        # print(f"Write Thread: Sender Buffer: {self.sender_buffer_in_use}, Receiver Buffer: {self.receiver_buffer_in_use}")
+        
         if throughput_increase > 0 and self.track_states:
             with open('thread_level_states.csv', 'a') as f:
                 f.write(f"Write, {throughput_increase}, {self.sender_buffer_in_use}, {self.receiver_buffer_in_use}\n")
@@ -141,7 +144,7 @@ class NetworkSystemSimulator:
         
         return utility * -1
     
-    def optimize_threads(self, init_threads=(1, 1, 1)):
+    def optimize_evolution(self, init_threads=(1, 1, 1)):
         bounds = [(1, 10), (1, 10), (1, 10)]  # Adjust the upper bound as needed
 
         result = differential_evolution(
@@ -157,9 +160,157 @@ class NetworkSystemSimulator:
         
         optimal_threads = np.round(result.x).astype(int)  # Ensure integer threads
         return optimal_threads
+    
+    def optimize_bayes(self):
+        observation_limit, count = 25, 0
+        search_space  = [
+                Integer(1, 10),
+                Integer(1, 10),
+                Integer(5, 20),
+            ]
 
+        params = []
+        optimizer = Optimizer(
+            dimensions=search_space,
+            base_estimator="GP",  # Gaussian Process (GP)
+            acq_func="gp_hedge",  # Acquisition function (gp_hedge)
+            acq_optimizer="auto",  # Acquisition optimizer (auto)
+            n_random_starts=3,
+            model_queue_size=observation_limit,
+        )
+
+        current_utility = 0
+        previous_utility = 0
+        patience = 10
+
+        best_params = None
+        best_score = None
+        best_iteration = 0
+
+        while True:
+            previous_utility = current_utility
+
+            if len(optimizer.yi) > observation_limit:
+                optimizer.yi = optimizer.yi[-observation_limit:]
+                optimizer.Xi = optimizer.Xi[-observation_limit:]
+
+            # if self.verbose:
+            #     self.logger.info(f"Iteration {count} Starts...")
+
+            t1 = time.time()
+            res = optimizer.run(func=self.get_utility_value, n_iter=3)
+            t2 = time.time()
+
+            # if self.verbose:
+            print(f"Iteration {count} Ends, Best Params: {res.x} and Score: {res.fun * -1}.")
+
+            # write the previous print statement to a file
+            with open('optimization_log.csv', 'a') as f:
+                f.write(f"Iteration {count} Ends, Best Params: {res.x} and Score: {res.fun * -1}.\n")
+
+            last_utility_value = np.min(optimizer.yi[-3:])
+            
+            current_utility = last_utility_value
+
+            # stop if convergence is reached
+            if current_utility > previous_utility:
+                print(f"Current Utility: {current_utility} is greater than Previous Utility: {previous_utility}.")
+                count += 1
+
+            if best_score is None or best_score > last_utility_value:
+                best_score = -last_utility_value
+                best_params = res.x
+                best_iteration = count
+
+            if patience == count:
+                print(f"Stopping the optimization as the utility value is not improving for {patience} iterations.")
+                print(f"Best Params: {best_params} and Best Score: {best_score} at iteration {best_iteration}.")
+                params = res.x
+                break
+
+        return params
+    
+
+#############################################################
+
+# import numpy as np
+# import random
+
+# class GradientDescentOptimizer:
+#     def __init__(self, simulator, max_thread_counts=(10, 10, 10), exploration_rate=0.2, exploration_decay=0.95):
+#         self.simulator = simulator
+#         self.max_thread_counts = max_thread_counts  # Maximum thread counts for each type
+#         self.exploration_rate = exploration_rate  # Initial exploration rate
+#         self.exploration_decay = exploration_decay  # Exploration decay over iterations
+
+#     def optimize(self):
+#         max_thread_counts_local = 10
+#         counts = [0, 0, 0]
+#         min_cost = float('inf')
+#         utility_values = []
+#         concurrencies = [[1, 1, 1], [1, 1, 1]]  # Initial concurrency configuration
+#         directions = [0, 0, 0]  # Separate direction for each variable
+
+#         while True:
+#             counts[0] += 1
+#             current_concurrency = concurrencies[-1]
+#             utility = self.simulator.get_utility_value(current_concurrency)
+#             utility_values.append(utility)
+
+#             if utility < min_cost:
+#                 min_cost = utility  # Track best utility
+#             else:
+#                 # Apply exploration randomly to avoid local minima
+#                 if random.random() < self.exploration_rate:
+#                     # Introduce random perturbations within bounds
+#                     current_concurrency = [
+#                         min(max(1, current_concurrency[i] + random.randint(-2, 2)), max_thread_counts_local) for i in range(3)
+#                     ]
+#                     print(f"Exploration step at iteration {counts[0]}, new concurrency: {current_concurrency}")
+
+#             # Compute gradient and update directions
+#             if len(utility_values) > 1:
+#                 for i in range(3):  # For read, network, write threads
+#                     prev_concurrency = concurrencies[-1][i]
+#                     current_concurrency_val = current_concurrency[i]
+
+#                     # Calculate gradient
+#                     gradient = (utility_values[-1] - utility_values[-2]) / (1 if prev_concurrency == current_concurrency_val else current_concurrency_val - prev_concurrency)
+#                     gradient_change = np.abs(gradient / (1 if utility_values[-2] == 0 else utility_values[-2]))
+
+#                     # Adjust direction based on gradient sign
+#                     if gradient > 0:
+#                         directions[i] = min(-1, directions[i] - 1)
+#                     else:
+#                         directions[i] = max(1, directions[i] + 1)
+
+#                     # Calculate next step
+#                     update = int(directions[i] * np.ceil(current_concurrency[i] * gradient_change))
+#                     current_concurrency[i] = max(1, min(current_concurrency[i] + update, max_thread_counts_local))
+
+#                 # Append the fully updated concurrency configuration
+#                 concurrencies.append(current_concurrency.copy())
+
+#             # Decay exploration rate gradually
+#             # self.exploration_rate *= self.exploration_decay
+
+#             # Stop criteria
+#             if min(utility_values) < -16.5:  # Increased to 50 iterations for thorough exploration
+#                 print(f"Stopping optimization. Best configuration found: {concurrencies[-1]} with utility: {min_cost}.")
+#                 break
+
+#         return concurrencies[-1]
+
+# # Example usage:
+# simulator = NetworkSystemSimulator()
+# optimizer = GradientDescentOptimizer(simulator)
+# optimal_threads = optimizer.optimize()
+# print(f"Optimal threads: Read={(optimal_threads[0])}, Network={(optimal_threads[1])}, Write={(optimal_threads[2])}")
+
+#############################################################
 # Example usage:
 simulator = NetworkSystemSimulator()
-optimal_threads = simulator.optimize_threads()
+# optimal_threads = simulator.optimize_evolution()
+optimal_threads = simulator.optimize_bayes()
 print(f"Optimal threads: Read={(optimal_threads[0])}, Network={(optimal_threads[1])}, Write={(optimal_threads[2])}")
 # simulator.get_utility_value([2, 3, 2])
