@@ -126,9 +126,11 @@ test-output
 .gitignore~
 *.java~
 *.xml~
-# *.csv
 *.txt
 *.log
 .DS_Store
 **/*.pem
 **/*.json
+
+*.csv
+*.pth

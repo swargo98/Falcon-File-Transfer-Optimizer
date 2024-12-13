@@ -1,0 +1,155 @@
+Episode 1, Last State: [ 3. 10.  3.], Reward: 284.02142152791
+Episode 2, Last State: [31. 71.  1.], Reward: 61.836094980828136
+Episode 3, Last State: [ 19. 100.  11.], Reward: 627.0535343985208
+Episode 4, Last State: [ 16. 100.   3.], Reward: 189.92221790119282
+Episode 5, Last State: [ 35. 100.  18.], Reward: 843.0701412786366
+Episode 6, Last State: [ 38. 100.  59.], Reward: 644.0622062404732
+Episode 7, Last State: [ 50. 100.  73.], Reward: 521.6120019366089
+Episode 8, Last State: [ 37. 100.  93.], Reward: 544.0348326518708
+Episode 9, Last State: [ 31. 100. 100.], Reward: 572.1126116635273
+Episode 10, Last State: [ 16. 100. 100.], Reward: 703.1511921662333
+Episode 11, Last State: [  4. 100. 100.], Reward: 521.3692206362102
+Episode 12, Last State: [  9. 100. 100.], Reward: 778.9670505186918
+Episode 13, Last State: [  5. 100. 100.], Reward: 590.8924631883359
+Episode 14, Last State: [ 26. 100. 100.], Reward: 611.5455380047875
+Episode 15, Last State: [ 14. 100. 100.], Reward: 723.7514337756952
+Episode 16, Last State: [ 22. 100. 100.], Reward: 646.0270190439927
+Episode 17, Last State: [ 11. 100. 100.], Reward: 1077.9247178326539
+Episode 18, Last State: [ 14. 100. 100.], Reward: 723.7514337756952
+Episode 19, Last State: [ 11. 100. 100.], Reward: 756.222719216403
+Episode 1, Last State: [6. 1. 6.], Reward: 792.7783035524858
+Episode 2, Last State: [1. 8. 5.], Reward: 405.8987233234104
+Episode 3, Last State: [ 1. 18.  1.], Reward: 156.856950730807
+Episode 4, Last State: [ 1. 38.  7.], Reward: 358.44159382670733
+Episode 5, Last State: [ 1. 30.  2.], Reward: 220.52591401189028
+Episode 6, Last State: [ 2. 49. 23.], Reward: 394.85267921461764
+Episode 7, Last State: [ 1. 43. 19.], Reward: 209.35707342590857
+Episode 8, Last State: [ 1. 46. 21.], Reward: 204.23012785755117
+Episode 9, Last State: [ 1. 29. 10.], Reward: 236.38291252088086
+Episode 10, Last State: [ 1. 40. 10.], Reward: 225.36083358422172
+Episode 11, Last State: [ 1. 27.  9.], Reward: 240.29854368363547
+Episode 12, Last State: [ 1. 34. 16.], Reward: 221.88439477663573
+Episode 13, Last State: [ 1. 23.  8.], Reward: 246.80137656156722
+Episode 14, Last State: [ 1. 28.  4.], Reward: 247.85873499133308
+Episode 15, Last State: [ 1. 10.  3.], Reward: 251.530854970865
+Episode 16, Last State: [ 1. 15.  4.], Reward: 264.7225840622566
+Episode 17, Last State: [ 1. 14.  6.], Reward: 262.6212301517365
+Episode 18, Last State: [ 1. 29. 19.], Reward: 222.9912924265625
+Episode 19, Last State: [ 1. 27. 24.], Reward: 218.79538092184052
+Episode 20, Last State: [ 1. 31. 26.], Reward: 211.91962193225282
+Episode 21, Last State: [ 1. 16. 15.], Reward: 245.18281822864947
+Episode 22, Last State: [ 1. 22. 17.], Reward: 234.13703416784455
+Episode 23, Last State: [ 1. 33. 30.], Reward: 205.26712480712428
+Episode 24, Last State: [ 1. 45. 29.], Reward: 195.36817293167573
+Episode 25, Last State: [ 1. 23. 12.], Reward: 240.3017219972549
+Episode 26, Last State: [ 1. 24. 20.], Reward: 227.50622272898548
+Episode 27, Last State: [ 1. 17.  7.], Reward: 256.50892470521603
+Episode 28, Last State: [ 1. 13.  4.], Reward: 267.72433355392104
+Episode 29, Last State: [ 1. 13.  7.], Reward: 262.39586209736535
+Episode 30, Last State: [1. 6. 2.], Reward: 254.11495463748565
+Episode 31, Last State: [ 1. 10.  8.], Reward: 265.420428588836
+Episode 32, Last State: [1. 8. 6.], Reward: 369.8585444791047
+Episode 33, Last State: [1. 8. 7.], Reward: 396.6715298505595
+Episode 34, Last State: [1. 7. 3.], Reward: 279.32534683458874
+Episode 35, Last State: [1. 5. 5.], Reward: 279.1825858267465
+Episode 36, Last State: [1. 3. 1.], Reward: 226.58290880226753
+Episode 37, Last State: [1. 3. 3.], Reward: 295.9239467018764
+Episode 38, Last State: [1. 1. 1.], Reward: 166.66511439392207
+Episode 39, Last State: [1. 3. 3.], Reward: 295.9229663391306
+Episode 40, Last State: [1. 3. 1.], Reward: 165.33256955998473
+Episode 41, Last State: [1. 3. 2.], Reward: 231.28128097854318
+Episode 42, Last State: [1. 1. 1.], Reward: 166.66511439392207
+Episode 43, Last State: [1. 6. 2.], Reward: 227.4767523585624
+Episode 44, Last State: [1. 3. 1.], Reward: 101.60771661250872
+Episode 45, Last State: [1. 1. 2.], Reward: 204.53512881108452
+Episode 46, Last State: [1. 3. 1.], Reward: 165.33256955998473
+Episode 47, Last State: [1. 1. 1.], Reward: 166.66511439392207
+Episode 48, Last State: [1. 3. 1.], Reward: 101.60771661250872
+Episode 49, Last State: [1. 1. 1.], Reward: 102.94026144644609
+Episode 50, Last State: [1. 6. 1.], Reward: 99.70545230251834
+Episode 51, Last State: [1. 5. 1.], Reward: 100.32702605431236
+Episode 52, Last State: [1. 7. 1.], Reward: 162.82091921882375
+Episode 53, Last State: [1. 5. 1.], Reward: 164.05187900178834
+Episode 54, Last State: [2. 5. 1.], Reward: 99.65421463555147
+Episode 55, Last State: [1. 7. 1.], Reward: 99.09606627134774
+Episode 56, Last State: [ 2. 11.  1.], Reward: 96.10287817312735
+Episode 57, Last State: [ 1. 12.  2.], Reward: 191.10187693919713
+Episode 58, Last State: [1. 1. 1.], Reward: 102.94026144644609
+Episode 59, Last State: [29.  8.  2.], Reward: 166.44233771992356
+Episode 60, Last State: [1. 1. 1.], Reward: 102.94026144644609
+Episode 61, Last State: [1. 2. 1.], Reward: 102.26733565050255
+Episode 62, Last State: [14.  7.  1.], Reward: 91.30804452193718
+Episode 63, Last State: [16.  8.  1.], Reward: 89.68059515600271
+Episode 64, Last State: [22.  4.  1.], Reward: 89.28678879514655
+Episode 65, Last State: [31.  9.  1.], Reward: 82.54294330198371
+Episode 66, Last State: [43. 10.  1.], Reward: 77.96204273207942
+Episode 67, Last State: [61. 10.  1.], Reward: 73.4833961774961
+Episode 68, Last State: [81.  3.  1.], Reward: 74.33234278367082
+Episode 69, Last State: [38.  3.  1.], Reward: 83.7857209207834
+Episode 70, Last State: [81.  3.  1.], Reward: 74.33234278367082
+Episode 71, Last State: [75.  3.  1.], Reward: 75.22027496631446
+Episode 72, Last State: [84.  1.  4.], Reward: 217.0773269501875
+Episode 73, Last State: [71.  1.  1.], Reward: 126.22625838364746
+Episode 74, Last State: [100.   1.   9.], Reward: 146.63706287448946
+Episode 75, Last State: [100.   1.   6.], Reward: 150.47823318630873
+Episode 76, Last State: [100.   1.  22.], Reward: 132.39348807362882
+Episode 77, Last State: [100.   1.  10.], Reward: 145.4065527297758
+Episode 78, Last State: [100.   1.  14.], Reward: 140.7211039377398
+Episode 79, Last State: [100.   1.   6.], Reward: 150.47823318630873
+Episode 80, Last State: [99.  1.  7.], Reward: 149.3794533569805
+Episode 81, Last State: [100.   1.  11.], Reward: 144.2001702349585
+Episode 82, Last State: [100.   1.   2.], Reward: 151.16218736933385
+Episode 83, Last State: [100.   1.   2.], Reward: 151.16218736933385
+Episode 84, Last State: [100.   1.   1.], Reward: 118.19442785046614
+Episode 85, Last State: [100.   1.  11.], Reward: 144.2001702349585
+Episode 86, Last State: [100.   1.  21.], Reward: 133.36373692521954
+Episode 87, Last State: [100.   1.   8.], Reward: 147.89218322209734
+Episode 88, Last State: [100.   1.  11.], Reward: 144.2001702349585
+Episode 89, Last State: [100.   1.  32.], Reward: 123.67814528700642
+Episode 90, Last State: [100.   1.  26.], Reward: 128.69904367657114
+Episode 91, Last State: [100.   1.  47.], Reward: 113.45087685105086
+Episode 92, Last State: [100.   1.  48.], Reward: 112.87107623620857
+Episode 93, Last State: [100.   1.  24.], Reward: 130.50969080314323
+Episode 94, Last State: [100.   1.  46.], Reward: 114.04227347819001
+Episode 95, Last State: [100.   1.  33.], Reward: 122.89780999694929
+Episode 96, Last State: [100.   3.  16.], Reward: 406.97618121684184
+Episode 97, Last State: [100.   1.  34.], Reward: 122.1327753988541
+Episode 98, Last State: [100.   8.  42.], Reward: 856.0879191929564
+Episode 99, Last State: [100.   4.  16.], Reward: 537.0918911631346
+Episode 100, Last State: [100.   1.   5.], Reward: 151.81017694015304
+Episode 101, Last State: [100.  17.   5.], Reward: 307.63403307114066
+Episode 102, Last State: [100.   1.   3.], Reward: 182.82316592091695
+Episode 103, Last State: [100.  12.   7.], Reward: 440.281745924338
+Episode 104, Last State: [100.  24.  27.], Reward: 941.9221301429322
+Episode 105, Last State: [100.  39.  31.], Reward: 798.8510236836782
+Episode 106, Last State: [100.  40.  44.], Reward: 706.5198194633367
+Episode 107, Last State: [79. 41. 48.], Reward: 727.8245413385391
+Episode 108, Last State: [53. 36. 37.], Reward: 924.6439258762534
+Episode 109, Last State: [11. 10. 11.], Reward: 935.1072844817393
+Episode 110, Last State: [15. 17. 15.], Reward: 1155.089260890893
+Episode 111, Last State: [3. 2. 3.], Reward: 298.8074242110348
+Episode 112, Last State: [2. 5. 5.], Reward: 485.20546810293206
+Episode 113, Last State: [1. 2. 3.], Reward: 297.902803815884
+Episode 114, Last State: [3. 6. 2.], Reward: 195.40042085398613
+Episode 115, Last State: [ 5. 10.  7.], Reward: 636.1702639363222
+Episode 116, Last State: [3. 6. 6.], Reward: 570.8299624740029
+Episode 117, Last State: [4. 6. 5.], Reward: 475.56607749716557
+Episode 118, Last State: [2. 2. 3.], Reward: 300.7862813250167
+Episode 119, Last State: [1. 3. 3.], Reward: 295.9239467018764
+Episode 120, Last State: [4. 3. 4.], Reward: 390.5979401451093
+Episode 121, Last State: [16. 19. 16.], Reward: 1200.2485343474004
+Episode 122, Last State: [3. 5. 7.], Reward: 717.8808137251395
+Episode 123, Last State: [5. 7. 7.], Reward: 648.4720512094689
+Episode 124, Last State: [18. 36. 31.], Reward: 1212.1278251582876
+Episode 125, Last State: [12. 20. 19.], Reward: 1428.336070166846
+Episode 126, Last State: [1. 7. 8.], Reward: 580.767561956249
+Episode 127, Last State: [1. 7. 7.], Reward: 524.6084571229296
+Episode 128, Last State: [11. 22. 26.], Reward: 1434.0626113601907
+Episode 129, Last State: [ 65.  54. 100.], Reward: 530.1172923627712
+Episode 130, Last State: [49. 35. 74.], Reward: 776.9732748396182
+Episode 131, Last State: [64. 52. 77.], Reward: 599.4297579128408
+Episode 132, Last State: [ 91.  72. 100.], Reward: 380.31591120497797
+Episode 133, Last State: [91. 48. 99.], Reward: 484.60053989618234
+Episode 134, Last State: [100.  66. 100.], Reward: 382.6888784782425
+Episode 135, Last State: [100.  64. 100.], Reward: 390.3424426147096
+Episode 136, Last State: [100.  57. 100.], Reward: 419.6481231935635
