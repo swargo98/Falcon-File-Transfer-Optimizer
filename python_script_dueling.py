@@ -333,6 +333,38 @@ class ResidualBlock(nn.Module):
 class PolicyNetworkContinuous(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(PolicyNetworkContinuous, self).__init__()
+        # Initial linear layer
+        self.fc_in = nn.Linear(state_dim, 256)
+        
+        # Residual blocks (you can stack multiple)
+        self.res_block1 = ResidualBlock(256, activation=nn.Tanh)
+        self.res_block2 = ResidualBlock(256, activation=nn.Tanh)
+        
+        # Final layers for mean and log_std
+        self.mean_layer = nn.Linear(256, action_dim)
+        self.log_std = nn.Parameter(torch.zeros(action_dim))
+        self.log_std_min = -20
+        self.log_std_max = 2
+        
+        self.to(device)
+
+    def forward(self, state):
+        x = self.fc_in(state)
+        x = torch.tanh(x)
+        
+        # Pass through residual blocks
+        x = self.res_block1(x)
+        x = self.res_block2(x)
+        
+        mean = self.mean_layer(x)
+        # Clamp log_std and exponentiate to get std
+        log_std = torch.clamp(self.log_std, self.log_std_min, self.log_std_max)
+        std = torch.exp(log_std)
+        return mean, std
+    
+class PolicyNetworkContinuous(nn.Module):
+    def __init__(self, state_dim, action_dim):
+        super(PolicyNetworkContinuous, self).__init__()
         # Shared feature layers
         self.feature_layer = nn.Sequential(
             nn.Linear(state_dim, 256),
@@ -356,6 +388,7 @@ class PolicyNetworkContinuous(nn.Module):
         )
         
         self.log_std = nn.Parameter(torch.zeros(action_dim))
+        self.to(device)
         
     def forward(self, state):
         features = self.feature_layer(state)

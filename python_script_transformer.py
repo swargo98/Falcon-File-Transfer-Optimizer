@@ -339,6 +339,7 @@ class PolicyNetworkContinuous(nn.Module):
         
         self.mean_layer = nn.Linear(256, action_dim)
         self.log_std = nn.Parameter(torch.zeros(action_dim))
+        self.to(device)
         
     def forward(self, state):
         x = torch.tanh(self.embedding(state))

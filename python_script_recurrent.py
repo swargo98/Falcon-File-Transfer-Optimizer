@@ -473,7 +473,7 @@ from tqdm import tqdm
 def train_ppo(env, agent, max_episodes=1000):
     memory = Memory()
     total_rewards = []
-    for episode in range(1, max_episodes+1):
+    for episode in tqdm(range(1, max_episodes + 1), desc="Episodes"):
         state = env.reset()
         episode_reward = 0
         # Initialize hidden states for policy and value
@@ -503,7 +503,7 @@ def train_ppo(env, agent, max_episodes=1000):
         if episode % 100 == 0:
             avg_reward = np.mean(total_rewards[-100:])
             print(f"Episode {episode}\tAverage Reward: {avg_reward:.2f}")
-        if episode % 10 == 0:
+        if episode % 1000 == 0:
             save_model(agent, "models/recurrent_policy_"+ str(episode) +".pth", "models/recurrent_value_"+ str(episode) +".pth")
             print("Model saved successfully.")
 
@@ -540,7 +540,7 @@ if __name__ == '__main__':
     env = NetworkOptimizationEnv()
     agent = RecurrentPPOAgent(state_dim=8, action_dim=3, lr=1e-4, eps_clip=0.1)
     print("Training PPO agent on Network System Simulator with continuous actions...")
-    rewards = train_ppo(env, agent, max_episodes=2000)
+    rewards = train_ppo(env, agent, max_episodes=50000)
 
     plot_rewards(rewards, 'PPO Training Rewards', 'training_rewards_recurrent.pdf')
 
@@ -553,6 +553,6 @@ if __name__ == '__main__':
     print(f"Loading model... Value: {value_model}, Policy: {policy_model}")
     load_model(agent, "models/"+policy_model, "models/"+value_model)
     print("Model loaded successfully.")
-    rewards = train_ppo(env, agent, max_episodes=100)
+    rewards = train_ppo(env, agent, max_episodes=1000)
 
     plot_rewards(rewards, 'PPO Inference Rewards', 'inference_rewards_recurrent.pdf')
