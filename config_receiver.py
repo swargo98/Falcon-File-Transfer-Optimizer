@@ -1,10 +1,10 @@
 configurations = {
     "receiver": {
-        "host": "127.0.0.1",
-        "port": 8000
+        "host": "10.10.1.2",
+        "port": 50026
     },
-    "data_dir": "/home/rs75c/Falcon-File-Transfer-Optimizer/dest/",
-    "max_cc": 100,
+    "data_dir": "dest/",
+    "max_cc": 20,
     "file_transfer": True,
-    "loglevel": "debug",
+    "loglevel": "info",
 }

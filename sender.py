@@ -120,8 +120,8 @@ def worker(process_id, q):
                 sock.connect((HOST, PORT))
 
                 if emulab_test:
-                    target, factor = 50, 10
-                    max_speed = (target * 1000 * 1000)/8
+                    target, factor = configurations['io_limit'], 8
+                    max_speed = (target * 1024 * 1024)/8
                     second_target, second_data_count = int(max_speed/factor), 0
 
                 while (not q.empty()) and (process_status[process_id] == 1):
@@ -397,6 +397,10 @@ def report_throughput(start_time):
                 time_since_begining, curr_thrpt, thrpt, m_avg))
 
             t2 = time.time()
+
+            with open('timed_log_network_falcon_' + str(configurations['io_limit']) +'.csv', 'a') as f:
+                f.write(f"{t2}, {time_since_begining}, {curr_thrpt}, {sum(process_status)}\n")
+
             time.sleep(max(0, 1 - (t2-t1)))
 
 

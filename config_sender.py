@@ -1,10 +1,10 @@
 configurations = {
     "receiver": {
-        "host": "127.0.0.1",
-        "port": 8000
+        "host": "10.10.1.2",
+        "port": 50026
     },
-    "data_dir": "/home/rs75c/Falcon-File-Transfer-Optimizer/src/",
-    "method": "bayes", # options: [gradient, bayes, random, brute, probe, cg, lbfgs]
+    "data_dir": "src/",
+    "method": "gradient", # options: [gradient, bayes, random, brute, probe, cg, lbfgs]
     "bayes": {
         "initial_run": 3,
         "num_of_exp": -1 #-1 for infinite
@@ -12,7 +12,8 @@ configurations = {
     "random": {
         "num_of_exp": 10
     },
-    "emulab_test": False, # True for per process I/O limit emulation
+    "emulab_test": True, # True for per process I/O limit emulation
+    "io_limit": 75,
     "centralized": False, # True for centralized optimization
     "file_transfer": True,
     "B": 10, # severity of the packet loss punishment
@@ -25,5 +26,5 @@ configurations = {
         "bsize": 10,
         "thread": 3
     },
-    "max_cc": 100,
+    "max_cc": 20,
 }
