@@ -761,8 +761,8 @@ if __name__ == '__main__':
         env = NetworkOptimizationEnv(simulator=simulator)
         agent = PPOAgentContinuous(state_dim=8, action_dim=3, lr=1e-4, eps_clip=0.1)
 
-        policy_model = find_last_policy_model()
-        value_model = find_last_value_model()
+        policy_model = 'residual_cl_5_policy_20000.pth'
+        value_model = 'residual_cl_5_value_20000.pth'
 
         print(f"Loading model... Value: {value_model}, Policy: {policy_model}")
         load_model(agent, "models/"+policy_model, "models/"+value_model)

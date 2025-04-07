@@ -215,6 +215,65 @@ class NetworkSystemSimulator:
 
         return utility, final_state
 
+import math
+class SimulatorGenerator:
+    def generate_simulator(self, episode=1):
+        factor = max(4 - (episode/100000), 1)
+        oneGB = 1024
+        env_cnt = episode/800
+        divison_coefficients = [1.5, 2.0, 2.5, 3.0]
+        division_coefficient = divison_coefficients[min(2, int(env_cnt / 170))]
+
+        sender_buffer_capacity = max(2, int(np.random.normal(loc=5, scale=1/factor))) * oneGB
+        receiver_buffer_capacity = max(2, int(np.random.normal(loc=5, scale=1/factor))) * oneGB
+        
+        read_bandwidth = sender_buffer_capacity
+        write_bandwidth = receiver_buffer_capacity
+        network_bandwidth = max(0.4, int(np.random.normal(loc=1, scale=0.3/factor))) * oneGB
+
+        read_throughput_per_thread = max(30, int(np.random.normal(loc=150, scale=30/factor)))
+        network_throughput_per_thread = max(30, int(np.random.normal(loc=150, scale=30/factor)))
+        write_throughput_per_thread = max(30, int(np.random.normal(loc=150, scale=30/factor)))
+        
+        if env_cnt % 25 < 5:
+            network_throughput_per_thread = read_throughput_per_thread
+            write_throughput_per_thread = read_throughput_per_thread
+        elif env_cnt % 25 < 10:
+            network_throughput_per_thread = read_throughput_per_thread
+            write_throughput_per_thread = read_throughput_per_thread/division_coefficient
+        elif env_cnt % 25 < 15:
+            network_throughput_per_thread = read_throughput_per_thread/division_coefficient
+            write_throughput_per_thread = read_throughput_per_thread
+        elif env_cnt % 25 < 20:
+            network_throughput_per_thread = write_throughput_per_thread
+            read_throughput_per_thread = write_throughput_per_thread/division_coefficient
+        else:
+            read_throughput_per_thread = network_throughput_per_thread/max(2.5, division_coefficient)
+            write_throughput_per_thread = network_throughput_per_thread*max(2.5, division_coefficient)
+
+        
+        
+
+        simulator = NetworkSystemSimulator(sender_buffer_capacity=sender_buffer_capacity,
+                                            receiver_buffer_capacity=receiver_buffer_capacity,
+                                            read_throughput_per_thread=read_throughput_per_thread,
+                                            network_throughput_per_thread=network_throughput_per_thread,
+                                            write_throughput_per_thread=write_throughput_per_thread,
+                                            read_bandwidth=read_bandwidth,
+                                            write_bandwidth=write_bandwidth,
+                                            network_bandwidth=network_bandwidth,
+                                            track_states=True)
+
+        min_bandwidth = min(read_bandwidth, write_bandwidth, network_bandwidth)
+
+        optimal_read_thread = max(2, math.ceil(min_bandwidth // read_throughput_per_thread))
+        optimal_network_thread = max(2, math.ceil(min_bandwidth // network_throughput_per_thread))
+        optimal_write_thread = max(2, math.ceil(min_bandwidth // write_throughput_per_thread))
+
+        optimals = [optimal_read_thread, optimal_network_thread, optimal_write_thread, min_bandwidth]
+        
+        return optimals, simulator
+
 class NetworkOptimizationEnv(gym.Env):
     def __init__(self, simulator=None):
         super(NetworkOptimizationEnv, self).__init__()
@@ -293,18 +352,21 @@ class NetworkOptimizationEnv(gym.Env):
     def reset(self):
         oneGB = 1024
 
-        initial_read_thread = np.random.randint(self.thread_limits[0], self.thread_limits[1] + 1)
-        initial_network_thread = np.random.randint(self.thread_limits[0], self.thread_limits[1] + 1)
-        initial_write_thread = np.random.randint(self.thread_limits[0], self.thread_limits[1] + 1)
+        self.simulator.read_thread = np.random.randint(3, 19)
+        self.simulator.network_thread = np.random.randint(3, 19)
+        self.simulator.write_thread = np.random.randint(3, 19)
+        sender_buffer_remaining_capacity = self.simulator.sender_buffer_capacity - self.simulator.sender_buffer_in_use
+        receiver_buffer_remaining_capacity = self.simulator.receiver_buffer_capacity - self.simulator.receiver_buffer_in_use
 
-        self.state = SimulatorState(sender_buffer_remaining_capacity=5*oneGB,
-                                    receiver_buffer_remaining_capacity=3*oneGB,
-                                    read_thread=initial_read_thread,
-                                    network_thread=initial_network_thread,
-                                    write_thread=initial_write_thread)
+        self.state = SimulatorState(
+            sender_buffer_remaining_capacity=sender_buffer_remaining_capacity,
+            receiver_buffer_remaining_capacity=receiver_buffer_remaining_capacity,
+            read_thread=self.simulator.read_thread,
+            network_thread=self.simulator.network_thread,
+            write_thread=self.simulator.write_thread,
+        )
+        
         self.current_step = 0
-        self.simulator.sender_buffer_in_use = 0
-        self.simulator.receiver_buffer_in_use = 0
         self.trajectory = [self.state.copy()]
 
         # Return initial state as NumPy array
@@ -645,49 +707,50 @@ if __name__ == '__main__':
         os.remove('throughputs.csv')
 
     oneGB = 1024
-    # simulator = NetworkSystemSimulator(sender_buffer_capacity=10*oneGB,
-    #                                             receiver_buffer_capacity=6*oneGB,
-    #                                             read_throughput_per_thread=200,
-    #                                             network_throughput_per_thread=150,
-    #                                             write_throughput_per_thread=70,
-    #                                             read_bandwidth=12*oneGB,
-    #                                             write_bandwidth=2*oneGB,
-    #                                             network_bandwidth=2*oneGB,
-    #                                             track_states=True)
-    # env = NetworkOptimizationEnv(simulator=simulator)
-    # agent = PPOAgentContinuous(state_dim=8, action_dim=3, lr=1e-4, eps_clip=0.1)
-    # rewards = train_ppo(env, agent, max_episodes=50000)
+    simulator_generator = SimulatorGenerator()
+    _, simulator = simulator_generator.generate_simulator(episode=801)
+    env = NetworkOptimizationEnv(simulator=simulator)
+    agent = PPOAgentContinuous(state_dim=8, action_dim=3, lr=1e-4, eps_clip=0.1)
     
-    # plot_rewards(rewards, 'PPO Training Rewards', 'training_rewards_residual_cl_10.pdf')
-    # plot_threads_csv('threads.csv', 'training_threads_plot_residual_cl_10.png')
-    # plot_throughputs_csv('throughputs.csv', 'training_throughputs_plot_residual_cl_10.png')
+    # policy_model = 'residual_cl_10_policy_10000.pth'
+    # value_model = 'residual_cl_10_value_10000.pth'
+
+    # print(f"Loading model... Value: {value_model}, Policy: {policy_model}")
+    # load_model(agent, "models/"+policy_model, "models/"+value_model)
+    # print("Model loaded successfully.")
+    
+    rewards = train_ppo(env, agent, max_episodes=50000)
+    
+    plot_rewards(rewards, 'PPO Training Rewards', 'training_rewards_residual_cl_10.pdf')
+    plot_threads_csv('threads.csv', 'training_threads_plot_residual_cl_10.png')
+    plot_throughputs_csv('throughputs.csv', 'training_throughputs_plot_residual_cl_10.png')
 
     # if os.path.exists('threads.csv'):
     #     os.remove('threads.csv')
     # if os.path.exists('throughputs.csv'):
     #     os.remove('throughputs.csv')
 
-    simulator = NetworkSystemSimulator(sender_buffer_capacity=10*oneGB,
-                                                receiver_buffer_capacity=6*oneGB,
-                                                read_throughput_per_thread=200,
-                                                network_throughput_per_thread=150,
-                                                write_throughput_per_thread=70,
-                                                read_bandwidth=12*oneGB,
-                                                write_bandwidth=1400,
-                                                network_bandwidth=2*oneGB,
-                                                track_states=True)
-    env = NetworkOptimizationEnv(simulator=simulator)
-    agent = PPOAgentContinuous(state_dim=8, action_dim=3, lr=1e-4, eps_clip=0.1)
+    # simulator = NetworkSystemSimulator(sender_buffer_capacity=10*oneGB,
+    #                                             receiver_buffer_capacity=6*oneGB,
+    #                                             read_throughput_per_thread=200,
+    #                                             network_throughput_per_thread=150,
+    #                                             write_throughput_per_thread=70,
+    #                                             read_bandwidth=12*oneGB,
+    #                                             write_bandwidth=1400,
+    #                                             network_bandwidth=2*oneGB,
+    #                                             track_states=True)
+    # env = NetworkOptimizationEnv(simulator=simulator)
+    # agent = PPOAgentContinuous(state_dim=8, action_dim=3, lr=1e-4, eps_clip=0.1)
 
-    policy_model = 'residual_cl_10_policy_50000.pth'
-    value_model = 'residual_cl_10_value_50000.pth'
+    # policy_model = 'residual_cl_10_policy_50000.pth'
+    # value_model = 'residual_cl_10_value_50000.pth'
 
-    print(f"Loading model... Value: {value_model}, Policy: {policy_model}")
-    load_model(agent, "models/"+policy_model, "models/"+value_model)
-    print("Model loaded successfully.")
+    # print(f"Loading model... Value: {value_model}, Policy: {policy_model}")
+    # load_model(agent, "models/"+policy_model, "models/"+value_model)
+    # print("Model loaded successfully.")
 
-    rewards = train_ppo(env, agent, max_episodes=10)
+    # rewards = train_ppo(env, agent, max_episodes=10000)
 
-    plot_rewards(rewards, 'PPO Inference Rewards', 'inference_rewards_residual_cl_10.pdf')
-    plot_threads_csv('threads.csv', 'inference_threads_plot_residual_cl_10.png')
-    plot_throughputs_csv('throughputs.csv', 'inference_throughputs_plot_residual_cl_10.png')
+    # plot_rewards(rewards, 'PPO Inference Rewards', 'inference_rewards_residual_cl_10.pdf')
+    # plot_threads_csv('threads.csv', 'inference_threads_plot_residual_cl_10.png')
+    # plot_throughputs_csv('throughputs.csv', 'inference_throughputs_plot_residual_cl_10.png')

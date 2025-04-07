@@ -35,9 +35,9 @@ class SimulatorState:
         read_thread_change=0,
         write_thread_change=0,
         network_thread_change=0,
-        read_thread=0,
-        write_thread=0,
-        network_thread=0,
+        read_thread=1,
+        write_thread=1,
+        network_thread=1,
         rewards_change=0
     ):
         self.sender_buffer_remaining_capacity = sender_buffer_remaining_capacity
@@ -104,7 +104,7 @@ class NetworkSystemSimulator:
         self.network_thread = network_thread
         self.write_thread = write_thread
         self.track_states = track_states
-        self.K = 1.08
+        self.K = 1.05
 
         min_bandwidth = min(read_bandwidth, write_bandwidth, network_bandwidth)
 
@@ -145,7 +145,7 @@ class NetworkSystemSimulator:
             self.sender_buffer_in_use += throughput_increase
 
         time_taken = throughput_increase / self.read_throughput_per_thread
-        next_time = time + time_taken + 0.001
+        next_time = time + time_taken + 0.01
         if next_time < 1:
             self.thread_queue.put((next_time, "read"))
 
@@ -165,7 +165,7 @@ class NetworkSystemSimulator:
             self.receiver_buffer_in_use += throughput_increase
 
         time_taken = throughput_increase / self.network_throughput_per_thread
-        next_time = time + time_taken + 0.001
+        next_time = time + time_taken + 0.01
         if next_time < 1:
             self.thread_queue.put((next_time, "network"))
         # print(f"Network Thread end: Network Throughput: {throughput_increase}, Sender Buffer: {self.sender_buffer_in_use}, Receiver Buffer: {self.receiver_buffer_in_use}")
@@ -183,7 +183,7 @@ class NetworkSystemSimulator:
             self.receiver_buffer_in_use -= throughput_increase
 
         time_taken = throughput_increase / self.write_throughput_per_thread
-        next_time = time + time_taken + 0.001
+        next_time = time + time_taken + 0.01
         if next_time < 1:
             self.thread_queue.put((next_time, "write"))
         # print(f"Write Thread: Sender Buffer: {self.sender_buffer_in_use}, Receiver Buffer: {self.receiver_buffer_in_use}")
@@ -240,23 +240,15 @@ class NetworkSystemSimulator:
         # print(f"Read thread: {read_thread}, Network thread: {network_thread}, Write thread: {write_thread}, Utility: {utility}")
 
         if self.track_states:
-            with open('threads_gradient_thread_sp_stability.csv', 'a') as f:
+            with open('threads_discrete_w_history_chatgpt.csv', 'a') as f:
                 f.write(f"{read_thread}, {network_thread}, {write_thread}\n")
-            with open('throughputs_gradient_thread_sp_stability.csv', 'a') as f:
+            with open('throughputs_discrete_w_history_chatgpt.csv', 'a') as f:
                 f.write(f"{self.read_throughput}, {self.network_throughput}, {self.write_throughput}\n")
 
-        throughput_reward = (((utility_read/self.optimal_reward_read)
-                        *(utility_network/self.optimal_reward_network)
-                        *(utility_write/self.optimal_reward_write))**(1/3)) * 100
-    
-        # Symmetric thread penalties
-        thread_penalties = -10 * (
-            abs(1 - self.optimal_read_thread/read_thread) +
-            abs(1 - self.optimal_network_thread/network_thread) +
-            abs(1 - self.optimal_write_thread/write_thread)
-        )
+        throughput_reward = max(self.read_throughput, self.network_throughput, self.write_throughput) / min(self.read_bandwidth, self.write_bandwidth, self.network_bandwidth)
+        thread_penalties = ((read_thread/self.optimal_read_thread) + (network_thread/self.optimal_network_thread) + (write_thread/self.optimal_write_thread))/3
 
-        reward = throughput_reward + thread_penalties
+        reward = throughput_reward - 0.4 * (thread_penalties ** 2)
         
         final_state = SimulatorState((self.sender_buffer_capacity-self.sender_buffer_in_use)/self.sender_buffer_capacity,
                                     (self.receiver_buffer_capacity-self.receiver_buffer_in_use)/self.receiver_buffer_capacity,
@@ -333,9 +325,7 @@ class NetworkOptimizationEnv(gym.Env):
         self.thread_limits = [1, 100]  # Threads can be between 1 and 10
 
         # Continuous action space: adjustments between -5.0 and +5.0
-        self.action_space = spaces.Box(low=np.array([self.thread_limits[0]] * 3),
-                               high=np.array([self.thread_limits[1]] * 3),
-                               dtype=np.float32)
+        self.action_space = spaces.MultiDiscrete([5, 5, 5])
 
         read_bw = self.simulator.read_bandwidth
         write_bw = self.simulator.write_bandwidth
@@ -378,29 +368,46 @@ class NetworkOptimizationEnv(gym.Env):
 
         self.state = SimulatorState(sender_buffer_remaining_capacity=self.simulator.sender_buffer_capacity,
                                     receiver_buffer_remaining_capacity=self.simulator.receiver_buffer_capacity)
-        self.max_steps = 5
+        self.max_steps = 20
         self.current_step = 0
 
         # For recording the trajectory
         self.trajectory = []
 
     def step(self, action):
-        new_thread_counts = np.clip(np.round(action), self.thread_limits[0], self.thread_limits[1]).astype(np.int32)
+        action_map = [-3, -1, 0, +1, +3]
+
+        read_index, net_index, write_index = action  # each in [0..4]
+        read_delta  = action_map[read_index]
+        net_delta   = action_map[net_index]
+        write_delta = action_map[write_index]
+
+        # 2) Compute new thread counts
+        new_read = min(max(self.simulator.read_thread + read_delta, self.thread_limits[0]), self.thread_limits[1])
+        new_network = min(max(self.simulator.network_thread + net_delta, self.thread_limits[0]), self.thread_limits[1])
+        new_write = min(max(self.simulator.write_thread + write_delta, self.thread_limits[0]), self.thread_limits[1])
+        new_thread_counts = [new_read, new_network, new_write]
 
         # Compute utility and update state
         utility, self.state = self.simulator.get_utility_value(new_thread_counts)
+        # print(f"ACTION: {action}")
+        # print(f"New Thread Counts: {new_thread_counts}")
 
         # Penalize actions that hit thread limits
         penalty = 0
         if new_thread_counts[0] == self.thread_limits[0] or new_thread_counts[0] == self.thread_limits[1]:
-            penalty -= 10  # Adjust penalty value as needed
+            penalty -= 0.60  # Adjust penalty value as needed
         if new_thread_counts[1] == self.thread_limits[0] or new_thread_counts[1] == self.thread_limits[1]:
-            penalty -= 10
+            penalty -= 0.60
         if new_thread_counts[2] == self.thread_limits[0] or new_thread_counts[2] == self.thread_limits[1]:
-            penalty -= 10
+            penalty -= 0.60
 
+        # Add penalty for large changes
+        # change_penalty = -0.1 * np.sum(np.abs(action)) / self.max_delta
+        change_penalty = 0
+        
         # Adjust reward
-        reward = utility + penalty
+        reward = utility + penalty + change_penalty
 
         self.current_step += 1
         done = self.current_step >= self.max_steps
@@ -453,6 +460,21 @@ class NetworkOptimizationEnv(gym.Env):
             )
 
 
+        self.simulator.sender_buffer_in_use = self.simulator.sender_buffer_capacity
+        self.simulator.receiver_buffer_in_use = self.simulator.receiver_buffer_capacity
+        self.simulator.read_thread = np.random.randint(1, 20)
+        self.simulator.network_thread = np.random.randint(1, 20)
+        self.simulator.write_thread = np.random.randint(1, 20)
+        self.simulator.prev_read_throughput = 0
+        self.simulator.prev_network_throughput = 0
+        self.simulator.prev_write_throughput = 0
+        self.simulator.reward = 0
+        self.state = SimulatorState(sender_buffer_remaining_capacity=self.simulator.sender_buffer_capacity,
+                                    receiver_buffer_remaining_capacity=self.simulator.receiver_buffer_capacity,
+                                    read_thread=self.simulator.read_thread,
+                                    network_thread=self.simulator.network_thread,
+                                    write_thread=self.simulator.write_thread)
+        
         self.current_step = 0
         self.trajectory = [self.state.copy()]
 
@@ -482,38 +504,24 @@ class ResidualBlock(nn.Module):
         out = self.activation(out)
         return out
     
-class PolicyNetworkContinuous(nn.Module):
-    def __init__(self, state_dim, action_dim):
-        super(PolicyNetworkContinuous, self).__init__()
-        self.input_layer = nn.Linear(state_dim, 256)
+class PolicyNetworkDiscrete(nn.Module):
+    def __init__(self, state_dim, num_dims=3, num_classes=5):
+        super(PolicyNetworkDiscrete, self).__init__()
+        self.num_dims = num_dims
+        self.num_classes = num_classes
         
-        self.residual_blocks = nn.ModuleList([
-            nn.Sequential(
-                nn.Linear(256, 256),
-                nn.LayerNorm(256),
-                nn.ReLU(),
-                nn.Linear(256, 256),
-                nn.LayerNorm(256)
-            ) for _ in range(3)
-        ])
-        
-        self.mean_layer = nn.Linear(256, action_dim)
-        self.log_std = nn.Parameter(torch.zeros(action_dim))
+        self.fc_in = nn.Linear(state_dim, 512)
+        self.fc_hidden = nn.Linear(512, 512)
+        self.fc_out = nn.Linear(512, num_dims * num_classes)
         self.to(device)
-        
+
     def forward(self, state):
-        x = torch.tanh(self.input_layer(state))
-        
-        # Residual connections
-        for block in self.residual_blocks:
-            residual = x
-            x = block(x)
-            x = torch.tanh(x + residual)
-        
-        mean = self.mean_layer(x)
-        log_std = torch.clamp(self.log_std, -20, 2)
-        std = torch.exp(log_std)
-        return mean, std
+        x = torch.tanh(self.fc_in(state))
+        x = torch.tanh(self.fc_hidden(x))
+        logits = self.fc_out(x)  # shape [batch_size, 15] if num_dims=3 & num_classes=5
+        # We can reshape to [batch_size, num_dims, num_classes] for convenience:
+        logits = logits.view(-1, self.num_dims, self.num_classes)
+        return logits
 
 class ValueNetwork(nn.Module):
     def __init__(self, state_dim):
@@ -540,8 +548,8 @@ class ValueNetwork(nn.Module):
 
 class PPOAgentContinuous:
     def __init__(self, state_dim, action_dim, lr=1e-3, gamma=0.99, eps_clip=0.2):
-        self.policy = PolicyNetworkContinuous(state_dim, action_dim)
-        self.policy_old = PolicyNetworkContinuous(state_dim, action_dim)
+        self.policy = PolicyNetworkDiscrete(state_dim, action_dim)
+        self.policy_old = PolicyNetworkDiscrete(state_dim, action_dim)
         self.policy_old.load_state_dict(self.policy.state_dict())
         self.value_function = ValueNetwork(state_dim)
         self.optimizer = optim.Adam([
@@ -551,62 +559,109 @@ class PPOAgentContinuous:
         self.gamma = gamma
         self.eps_clip = eps_clip
         self.MseLoss = nn.MSELoss()
+        self.num_dims = action_dim
 
-    def select_action(self, state, is_inference=False, std_scale=0.1):
-        state = torch.FloatTensor(state).to(device)
-        mean, std = self.policy_old(state)
-        if is_inference:
-            reduced_std = std_scale * std  # or some small fraction
-            dist = Normal(mean, reduced_std)
-        else:
-            # During training, sample from the distribution
-            dist = Normal(mean, std)
-        action = dist.sample()
-        action_logprob = dist.log_prob(action)
-        return action.detach().cpu().numpy(), action_logprob.detach().cpu().numpy()
+    def select_action(self, state, is_inference=False):
+        # state shape [state_dim]
+        state = torch.FloatTensor(state).unsqueeze(0).to(device)  # make batch=1
+        logits = self.policy_old(state)  # shape [1, num_dims, num_classes]
+
+        # For each dimension, create a Categorical distribution
+        action_indices = []
+        log_probs = []
+        for d in range(self.num_dims):
+            dist = torch.distributions.Categorical(logits=logits[0, d])  # shape [num_classes]
+            a = dist.sample()  # integer in [0..4]
+            action_indices.append(a.item())
+            log_probs.append(dist.log_prob(a))
+
+        # Combine
+        action_indices = np.array(action_indices, dtype=int)  # e.g. [2,0,4]
+        log_prob = torch.stack(log_probs).sum()
+
+        return action_indices, log_prob
 
     def update(self, memory):
-        states = torch.stack(memory.states).to(device)
-        actions = torch.tensor(np.array(memory.actions), dtype=torch.float32).to(device)
-        rewards = torch.tensor(memory.rewards, dtype=torch.float32).to(device)
-        old_logprobs = torch.tensor(np.array(memory.logprobs), dtype=torch.float32).to(device)
+        """
+        PPO update step for a discrete multi-dimensional action space.
 
-        # Compute discounted rewards
+        memory.states   -> list of torch.Tensor on CPU or GPU?
+        memory.actions  -> list of np.array (each shape = [num_dims])
+        memory.logprobs -> list of torch.Tensor (one per step) storing the old log-prob
+        memory.rewards  -> list of float
+        """
+
+        # 1) Prepare the batch data
+        # If memory.states is a list of PyTorch Tensors (each shape [state_dim]),
+        # we can do:
+        states = torch.stack(memory.states, dim=0).to(device)
+        # If memory.actions is a list of np.arrays, each shape [num_dims],
+        # we combine them into one tensor:
+        actions = torch.tensor(memory.actions, dtype=torch.long, device=device)
+        # old_logprobs is a list of Tensors => stack them
+        old_logprobs = torch.stack(memory.logprobs, dim=0).to(device)
+        # rewards is a list of floats => convert
+        rewards = torch.tensor(memory.rewards, dtype=torch.float32, device=device)
+
+        # 2) Compute discounted returns
         returns = []
         discounted_reward = 0
-        for reward in reversed(rewards):
-            discounted_reward = reward + self.gamma * discounted_reward
+        for r in reversed(rewards):
+            discounted_reward = r + self.gamma * discounted_reward
             returns.insert(0, discounted_reward)
-        returns = torch.tensor(returns, dtype=torch.float32).to(device)
+        returns = torch.tensor(returns, dtype=torch.float32, device=device)
+
+        # Optional: normalize
         returns = (returns - returns.mean()) / (returns.std() + 1e-5)
 
-        # Get new action probabilities
-        mean, std = self.policy(states)
-        dist = Normal(mean, std)
-        logprobs = dist.log_prob(actions)
-        entropy = dist.entropy()
+        # 3) Evaluate the new policy on these states
+        new_logits = self.policy(states) # shape [batch_size, num_dims, num_classes]
 
-        logprobs = logprobs.sum(dim=1)
-        old_logprobs = old_logprobs.sum(dim=1)
-        entropy = entropy.sum(dim=1)
+        # We'll compute the new log-probs dimension by dimension
+        batch_size, num_dims = actions.shape
+        new_logprobs_list = []
+        entropy_list = []
 
-        ratios = torch.exp(logprobs - old_logprobs)
-        state_values = self.value_function(states).squeeze()
+        for d in range(num_dims):
+            dist_d = torch.distributions.Categorical(logits=new_logits[:, d, :])
+            ad = actions[:, d]            # shape [batch_size]
+            # new log-prob for dimension d
+            new_logprob_d = dist_d.log_prob(ad)  # shape [batch_size]
+            new_logprobs_list.append(new_logprob_d)
 
-        # Compute advantage
+            # entropy
+            entropy_d = dist_d.entropy()         # shape [batch_size]
+            entropy_list.append(entropy_d)
+
+        new_logprobs = torch.stack(new_logprobs_list, dim=1).sum(dim=1) # [batch_size]
+        entropy = torch.stack(entropy_list, dim=1).sum(dim=1)           # [batch_size]
+
+        # 4) Compare new_logprobs to old_logprobs => ratio
+        # old_logprobs shape [batch_size], new_logprobs shape [batch_size]
+        ratios = torch.exp(new_logprobs - old_logprobs)
+
+        # 5) Value net & advantage
+        state_values = self.value_function(states).squeeze()  # [batch_size]
         advantages = returns - state_values.detach()
 
-        # Surrogate loss
+        # 6) Surrogate objective
         surr1 = ratios * advantages
-        surr2 = torch.clamp(ratios, 1 - self.eps_clip, 1 + self.eps_clip) * advantages
-        loss = -torch.min(surr1, surr2) + 0.5 * self.MseLoss(state_values, returns) - 0.1 * entropy
+        surr2 = torch.clamp(ratios, 1.0 - self.eps_clip, 1.0 + self.eps_clip) * advantages
 
-        # Update policy
+        # 7) Combine losses
+        policy_loss = -torch.min(surr1, surr2)
+        value_loss = self.MseLoss(state_values, returns)
+        # total
+        loss = policy_loss + 0.5 * value_loss - 0.01 * entropy
+
+        # 8) Update
         self.optimizer.zero_grad()
         loss.mean().backward()
         self.optimizer.step()
 
+        # 9) Sync old policy
         self.policy_old.load_state_dict(self.policy.state_dict())
+
 
 class Memory:
     def __init__(self):
@@ -624,7 +679,7 @@ class Memory:
 
 from tqdm import tqdm
 
-def train_ppo(env, agent, max_episodes=1000, is_inference=False, std_scale=0.1):
+def train_ppo(env, agent, max_episodes=1000, is_inference=False):
     memory = Memory()
     total_rewards = []
     for episode in tqdm(range(1, max_episodes + 1), desc="Episodes"):
@@ -637,7 +692,7 @@ def train_ppo(env, agent, max_episodes=1000, is_inference=False, std_scale=0.1):
             state = env.reset()
         episode_reward = 0
         for t in range(env.max_steps):
-            action, action_logprob = agent.select_action(state, is_inference=is_inference, std_scale=std_scale)
+            action, action_logprob = agent.select_action(state, is_inference=is_inference)
             next_state, reward, done, _ = env.step(action)
 
             memory.states.append(torch.FloatTensor(state).to(device))
@@ -654,7 +709,7 @@ def train_ppo(env, agent, max_episodes=1000, is_inference=False, std_scale=0.1):
         agent.update(memory)
 
         # print(f"Episode {episode}\tLast State: {state}\tReward: {reward}")
-        with open('episode_rewards_training_gradient_thread_sp_stability.csv', 'a') as f:
+        with open('episode_rewards_training_discrete_w_history_chatgpt.csv', 'a') as f:
                 f.write(f"Episode {episode}, Last State: {np.round(state[-3:])}, Reward: {reward}\n")
 
         memory.clear()
@@ -663,7 +718,7 @@ def train_ppo(env, agent, max_episodes=1000, is_inference=False, std_scale=0.1):
             avg_reward = np.mean(total_rewards[-100:])
             print(f"Episode {episode}\tAverage Reward: {avg_reward:.2f}")
         if episode % 1000 == 0:
-            save_model(agent, "models/training_gradient_thread_sp_stability_policy_"+ str(episode) +".pth", "models/training_gradient_thread_sp_stability_value_"+ str(episode) +".pth")
+            save_model(agent, "models/training_discrete_w_history_chatgpt_policy_"+ str(episode) +".pth", "models/training_discrete_w_history_chatgpt_value_"+ str(episode) +".pth")
             print("Model saved successfully.")
     return total_rewards
 
@@ -673,7 +728,7 @@ def plot_rewards(rewards, title, pdf_file):
     plt.xlabel('Episode')
     plt.ylabel('Total Reward')
     plt.xlim(0, len(rewards))
-    plt.ylim(-10, 110)
+    plt.ylim(-1, 1)
     plt.title(title)
     plt.grid(True)
     
@@ -684,11 +739,11 @@ import csv
 
 import pandas as pd
 
-def plot_threads_csv(threads_file='threads_gradient_thread_sp_stability.csv', optimals = None, output_file='threads_plot.png'):
+def plot_threads_csv(threads_file='threads_discrete_w_history_chatgpt.csv', optimals = None, output_file='threads_plot.png'):
     optimal_read, optimal_network, optimal_write, _ = optimals
     data = []
 
-    # Read data from threads_gradient_thread_sp_stability.csv
+    # Read data from threads_discrete_w_history_chatgpt.csv
     with open(threads_file, 'r') as f:
         reader = csv.reader(f)
         for row in reader:
@@ -736,11 +791,11 @@ def plot_threads_csv(threads_file='threads_gradient_thread_sp_stability.csv', op
     print(f"Saved thread count plot to {output_file}")
 
 # Function to plot throughputs with rolling averages
-def plot_throughputs_csv(throughputs_file='throughputs_gradient_thread_sp_stability.csv', optimals = None, output_file='throughputs_plot.png'):
+def plot_throughputs_csv(throughputs_file='throughputs_discrete_w_history_chatgpt.csv', optimals = None, output_file='throughputs_plot.png'):
     optimal_throughput = optimals[-1]
     data = []
 
-    # Read data from throughputs_gradient_thread_sp_stability.csv
+    # Read data from throughputs_discrete_w_history_chatgpt.csv
     with open(throughputs_file, 'r') as f:
         reader = csv.reader(f)
         for row in reader:
@@ -793,45 +848,45 @@ import re
 
 def find_last_policy_model():
     models = os.listdir("models")
-    models = [model for model in models if re.match(r'training_gradient_thread_sp_stability_policy_\d+\.pth', model)]
+    models = [model for model in models if re.match(r'training_discrete_w_history_chatgpt_policy_\d+\.pth', model)]
     models.sort(key=lambda x: int(re.search(r'\d+', x).group()))
     return models[-1]
 
 def find_last_value_model():
     models = os.listdir("models")
-    models = [model for model in models if re.match(r'training_gradient_thread_sp_stability_value_\d+\.pth', model)]
+    models = [model for model in models if re.match(r'training_discrete_w_history_chatgpt_value_\d+\.pth', model)]
     models.sort(key=lambda x: int(re.search(r'\d+', x).group()))
     return models[-1]
 
 if __name__ == '__main__':
-    if os.path.exists('threads_gradient_thread_sp_stability.csv'):
-        os.remove('threads_gradient_thread_sp_stability.csv')
-    if os.path.exists('throughputs_gradient_thread_sp_stability.csv'):
-        os.remove('throughputs_gradient_thread_sp_stability.csv')
+    # if os.path.exists('threads_discrete_w_history_chatgpt.csv'):
+    #     os.remove('threads_discrete_w_history_chatgpt.csv')
+    # if os.path.exists('throughputs_discrete_w_history_chatgpt.csv'):
+    #     os.remove('throughputs_discrete_w_history_chatgpt.csv')
 
-    oneGB = 1024
-    simulator = NetworkSystemSimulator(sender_buffer_capacity=10*oneGB,
-                                                receiver_buffer_capacity=6*oneGB,
-                                                read_throughput_per_thread=200,
-                                                network_throughput_per_thread=150,
-                                                write_throughput_per_thread=70,
-                                                read_bandwidth=12*oneGB,
-                                                write_bandwidth=2*oneGB,
-                                                network_bandwidth=2*oneGB,
-                                                track_states=True)
-    env = NetworkOptimizationEnv(simulator=simulator)
-    agent = PPOAgentContinuous(state_dim=12, action_dim=3, lr=1e-4, eps_clip=0.1)
-    rewards = train_ppo(env, agent, max_episodes=300000)
+    # oneGB = 1024
+    # simulator = NetworkSystemSimulator(sender_buffer_capacity=10*oneGB,
+    #                                             receiver_buffer_capacity=6*oneGB,
+    #                                             read_throughput_per_thread=200,
+    #                                             network_throughput_per_thread=150,
+    #                                             write_throughput_per_thread=70,
+    #                                             read_bandwidth=12*oneGB,
+    #                                             write_bandwidth=2*oneGB,
+    #                                             network_bandwidth=2*oneGB,
+    #                                             track_states=True)
+    # env = NetworkOptimizationEnv(simulator=simulator)
+    # agent = PPOAgentContinuous(state_dim=12, action_dim=3, lr=1e-4, eps_clip=0.1)
+    # rewards = train_ppo(env, agent, max_episodes=300000)
     
-    plot_rewards(rewards, 'PPO Training Rewards', 'training_rewards_training_gradient_thread_sp_stability.pdf')
+    # plot_rewards(rewards, 'PPO Training Rewards', 'training_rewards_training_discrete_w_history_chatgpt.pdf')
 
     inference_count = 5
     simulator_generator = SimulatorGenerator()
     for i in range(inference_count):
-        if os.path.exists('threads_gradient_thread_sp_stability.csv'):
-            os.remove('threads_gradient_thread_sp_stability.csv')
-        if os.path.exists('throughputs_gradient_thread_sp_stability.csv'):
-            os.remove('throughputs_gradient_thread_sp_stability.csv')
+        if os.path.exists('threads_discrete_w_history_chatgpt.csv'):
+            os.remove('threads_discrete_w_history_chatgpt.csv')
+        if os.path.exists('throughputs_discrete_w_history_chatgpt.csv'):
+            os.remove('throughputs_discrete_w_history_chatgpt.csv')
 
         optimals, simulator = simulator_generator.generate_simulator()
 
@@ -849,15 +904,15 @@ if __name__ == '__main__':
         env = NetworkOptimizationEnv(simulator=simulator)
         agent = PPOAgentContinuous(state_dim=12, action_dim=3, lr=1e-4, eps_clip=0.1)
 
-        policy_model = 'training_gradient_thread_sp_stability_policy_300000.pth'
-        value_model = 'training_gradient_thread_sp_stability_value_300000.pth'
+        policy_model = 'training_discrete_w_history_chatgpt_policy_300000.pth'
+        value_model = 'training_discrete_w_history_chatgpt_value_300000.pth'
 
         print(f"Loading model... Value: {value_model}, Policy: {policy_model}")
         load_model(agent, "models/"+policy_model, "models/"+value_model)
         print("Model loaded successfully.")
 
-        rewards = train_ppo(env, agent, max_episodes=20, is_inference=True, std_scale=0.1)
+        rewards = train_ppo(env, agent, max_episodes=20)
 
-        plot_rewards(rewards, 'PPO Inference Rewards', 'rewards/inference_rewards_training_gradient_thread_sp_stability_'+ str(i) +'.pdf')
-        plot_threads_csv('threads_gradient_thread_sp_stability.csv', optimals, 'threads/inference_threads_plot_training_gradient_thread_sp_stability_'+ str(i) +'.png')
-        plot_throughputs_csv('throughputs_gradient_thread_sp_stability.csv', optimals, 'throughputs/inference_throughputs_plot_training_gradient_thread_sp_stability_'+ str(i) +'.png') 
+        plot_rewards(rewards, 'PPO Inference Rewards', 'rewards/inference_rewards_training_discrete_w_history_chatgpt_'+ str(i) +'.pdf')
+        plot_threads_csv('threads_discrete_w_history_chatgpt.csv', optimals, 'threads/inference_threads_plot_training_discrete_w_history_chatgpt_'+ str(i) +'.png')
+        plot_throughputs_csv('throughputs_discrete_w_history_chatgpt.csv', optimals, 'throughputs/inference_throughputs_plot_training_discrete_w_history_chatgpt_'+ str(i) +'.png') 

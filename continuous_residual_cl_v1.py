@@ -111,9 +111,9 @@ class NetworkSystemSimulator:
         if next_time < 1:
             self.thread_queue.put((next_time, "read"))
 
-        if throughput_increase > 0 and self.track_states:
-            with open('thread_level_states.csv', 'a') as f:
-                f.write(f"Read, {throughput_increase}, {self.sender_buffer_in_use}, {self.receiver_buffer_in_use}\n")
+        # if throughput_increase > 0 and self.track_states:
+        #     with open('thread_level_states.csv', 'a') as f:
+        #         f.write(f"Read, {throughput_increase}, {self.sender_buffer_in_use}, {self.receiver_buffer_in_use}\n")
         return next_time
 
     def network_thread_task(self, time):
@@ -131,9 +131,9 @@ class NetworkSystemSimulator:
         if next_time < 1:
             self.thread_queue.put((next_time, "network"))
         # print(f"Network Thread end: Network Throughput: {throughput_increase}, Sender Buffer: {self.sender_buffer_in_use}, Receiver Buffer: {self.receiver_buffer_in_use}")
-        if throughput_increase > 0 and self.track_states:
-            with open('thread_level_states.csv', 'a') as f:
-                f.write(f"Network, {throughput_increase}, {self.sender_buffer_in_use}, {self.receiver_buffer_in_use}\n")
+        # if throughput_increase > 0 and self.track_states:
+        #     with open('thread_level_states.csv', 'a') as f:
+        #         f.write(f"Network, {throughput_increase}, {self.sender_buffer_in_use}, {self.receiver_buffer_in_use}\n")
         return next_time
 
     def write_thread_task(self, time):
@@ -203,9 +203,9 @@ class NetworkSystemSimulator:
         # print(f"Read thread: {read_thread}, Network thread: {network_thread}, Write thread: {write_thread}, Utility: {utility}")
 
         if self.track_states:
-            with open('threads_attention.csv', 'a') as f:
+            with open('threads.csv', 'a') as f:
                 f.write(f"{read_thread}, {network_thread}, {write_thread}\n")
-            with open('throughputs_attention.csv', 'a') as f:
+            with open('throughputs.csv', 'a') as f:
                 f.write(f"{self.read_throughput}, {self.network_throughput}, {self.write_throughput}\n")
 
         final_state = SimulatorState(self.sender_buffer_capacity-self.sender_buffer_in_use,
@@ -214,6 +214,65 @@ class NetworkSystemSimulator:
                                      read_thread, write_thread, network_thread)
 
         return utility, final_state
+
+import math
+class SimulatorGenerator:
+    def generate_simulator(self, episode=1):
+        factor = max(4 - (episode/100000), 1)
+        oneGB = 1024
+        env_cnt = episode/800
+        divison_coefficients = [1.5, 2.0, 2.5, 3.0]
+        division_coefficient = divison_coefficients[min(2, int(env_cnt / 170))]
+
+        sender_buffer_capacity = max(2, int(np.random.normal(loc=5, scale=1/factor))) * oneGB
+        receiver_buffer_capacity = max(2, int(np.random.normal(loc=5, scale=1/factor))) * oneGB
+        
+        read_bandwidth = sender_buffer_capacity
+        write_bandwidth = receiver_buffer_capacity
+        network_bandwidth = max(0.4, int(np.random.normal(loc=1, scale=0.3/factor))) * oneGB
+
+        read_throughput_per_thread = max(30, int(np.random.normal(loc=150, scale=30/factor)))
+        network_throughput_per_thread = max(30, int(np.random.normal(loc=150, scale=30/factor)))
+        write_throughput_per_thread = max(30, int(np.random.normal(loc=150, scale=30/factor)))
+        
+        if env_cnt % 25 < 5:
+            network_throughput_per_thread = read_throughput_per_thread
+            write_throughput_per_thread = read_throughput_per_thread
+        elif env_cnt % 25 < 10:
+            network_throughput_per_thread = read_throughput_per_thread
+            write_throughput_per_thread = read_throughput_per_thread/division_coefficient
+        elif env_cnt % 25 < 15:
+            network_throughput_per_thread = read_throughput_per_thread/division_coefficient
+            write_throughput_per_thread = read_throughput_per_thread
+        elif env_cnt % 25 < 20:
+            network_throughput_per_thread = write_throughput_per_thread
+            read_throughput_per_thread = write_throughput_per_thread/division_coefficient
+        else:
+            read_throughput_per_thread = network_throughput_per_thread/max(2.5, division_coefficient)
+            write_throughput_per_thread = network_throughput_per_thread*max(2.5, division_coefficient)
+
+        
+        
+
+        simulator = NetworkSystemSimulator(sender_buffer_capacity=sender_buffer_capacity,
+                                            receiver_buffer_capacity=receiver_buffer_capacity,
+                                            read_throughput_per_thread=read_throughput_per_thread,
+                                            network_throughput_per_thread=network_throughput_per_thread,
+                                            write_throughput_per_thread=write_throughput_per_thread,
+                                            read_bandwidth=read_bandwidth,
+                                            write_bandwidth=write_bandwidth,
+                                            network_bandwidth=network_bandwidth,
+                                            track_states=True)
+
+        min_bandwidth = min(read_bandwidth, write_bandwidth, network_bandwidth)
+
+        optimal_read_thread = max(2, math.ceil(min_bandwidth // read_throughput_per_thread))
+        optimal_network_thread = max(2, math.ceil(min_bandwidth // network_throughput_per_thread))
+        optimal_write_thread = max(2, math.ceil(min_bandwidth // write_throughput_per_thread))
+
+        optimals = [optimal_read_thread, optimal_network_thread, optimal_write_thread, min_bandwidth]
+        
+        return optimals, simulator
 
 class NetworkOptimizationEnv(gym.Env):
     def __init__(self, simulator=None):
@@ -226,10 +285,11 @@ class NetworkOptimizationEnv(gym.Env):
                                                 write_throughput_per_thread=35,
                                                 read_bandwidth=6*oneGB,
                                                 write_bandwidth=700,
-                                                network_bandwidth=1*oneGB)
+                                                network_bandwidth=1*oneGB,
+                                                track_states=True)
         if simulator is not None:
             self.simulator = simulator
-        self.thread_limits = [1, 100]  # Threads can be between 1 and 10
+        self.thread_limits = [1, 20]  # Threads can be between 1 and 10
 
         # Continuous action space: adjustments between -5.0 and +5.0
         self.action_space = spaces.Box(low=np.array([self.thread_limits[0]] * 3),
@@ -288,8 +348,11 @@ class NetworkOptimizationEnv(gym.Env):
 
         # Return state as NumPy array
         return self.state.to_array(), reward, done, {}
-
-    def reset(self):
+    
+    def reset(self, simulator=None):
+        if simulator is not None:
+            self.simulator = simulator
+            
         self.simulator.read_thread = np.random.randint(3, 19)
         self.simulator.network_thread = np.random.randint(3, 19)
         self.simulator.write_thread = np.random.randint(3, 19)
@@ -310,53 +373,84 @@ class NetworkOptimizationEnv(gym.Env):
         # Return initial state as NumPy array
         return self.state.to_array()
 
+class ResidualBlock(nn.Module):
+    def __init__(self, size, activation=nn.ReLU):
+        super(ResidualBlock, self).__init__()
+        self.fc1 = nn.Linear(size, size)
+        self.fc2 = nn.Linear(size, size)
+        self.activation = activation()
+
+    def forward(self, x):
+        # Save the input (for the skip connection)
+        residual = x
+        
+        # Pass through two linear layers with activation
+        out = self.fc1(x)
+        out = self.activation(out)
+        out = self.fc2(out)
+        
+        # Add the original input (residual connection)
+        out += residual
+        
+        # Optionally add another activation at the end
+        out = self.activation(out)
+        return out
+    
 class PolicyNetworkContinuous(nn.Module):
-    def __init__(self, state_dim, action_dim, num_heads=4, num_layers=2):
+    def __init__(self, state_dim, action_dim):
         super(PolicyNetworkContinuous, self).__init__()
-        self.embedding = nn.Linear(state_dim, 256)
-        encoder_layer = nn.TransformerEncoderLayer(d_model=256, nhead=num_heads)
-        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
+        self.input_layer = nn.Linear(state_dim, 256)
+        
+        self.residual_blocks = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(256, 256),
+                nn.LayerNorm(256),
+                nn.ReLU(),
+                nn.Linear(256, 256),
+                nn.LayerNorm(256)
+            ) for _ in range(3)
+        ])
         
         self.mean_layer = nn.Linear(256, action_dim)
         self.log_std = nn.Parameter(torch.zeros(action_dim))
         self.to(device)
         
     def forward(self, state):
-        x = torch.tanh(self.embedding(state))
-        x = x.unsqueeze(0)  # Add sequence dimension
-        x = self.transformer(x)
-        x = x.squeeze(0)
+        x = torch.tanh(self.input_layer(state))
+        
+        # Residual connections
+        for block in self.residual_blocks:
+            residual = x
+            x = block(x)
+            x = torch.tanh(x + residual)
+        
         mean = self.mean_layer(x)
         log_std = torch.clamp(self.log_std, -20, 2)
         std = torch.exp(log_std)
         return mean, std
-    
-class ValueNetwork(nn.Module):
-    def __init__(self, state_dim, num_heads=4):
-        super(ValueNetwork, self).__init__()
-        self.embedding = nn.Linear(state_dim, 256)
-        self.attention = nn.MultiheadAttention(embed_dim=256, num_heads=num_heads)
-        
-        self.fc_layers = nn.Sequential(
-            nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Linear(128, 64),
-            nn.ReLU(),
-            nn.Linear(64, 1)
-        )
-        self.to(device)
-        
-    def forward(self, state):
-        x = torch.tanh(self.embedding(state))
-        x = x.unsqueeze(0)  # Add sequence dimension
-        
-        # Self-attention
-        attn_output, _ = self.attention(x, x, x)
-        x = attn_output.squeeze(0)
-        
-        value = self.fc_layers(x)
-        return value
 
+class ValueNetwork(nn.Module):
+    def __init__(self, state_dim):
+        super(ValueNetwork, self).__init__()
+        self.fc_in = nn.Linear(state_dim, 256)
+        
+        # Add a few residual blocks
+        self.res_block1 = ResidualBlock(256, activation=nn.Tanh)
+        self.res_block2 = ResidualBlock(256, activation=nn.Tanh)
+
+        # Output value layer
+        self.fc_out = nn.Linear(256, 1)
+        self.to(device)
+
+    def forward(self, state):
+        x = self.fc_in(state)
+        x = torch.tanh(x)
+        
+        x = self.res_block1(x)
+        x = self.res_block2(x)
+        
+        value = self.fc_out(x)
+        return value
 
 class PPOAgentContinuous:
     def __init__(self, state_dim, action_dim, lr=1e-3, gamma=0.99, eps_clip=0.2):
@@ -443,7 +537,13 @@ def train_ppo(env, agent, max_episodes=1000):
     memory = Memory()
     total_rewards = []
     for episode in tqdm(range(1, max_episodes + 1), desc="Episodes"):
-        state = env.reset()
+        state = None
+        simulator_generator = SimulatorGenerator()
+        if episode > 10000 and episode % 800 == 0:
+            _, simulator = simulator_generator.generate_simulator(episode=episode-9600)
+            state = env.reset(simulator=simulator)
+        else:
+            state = env.reset()
         episode_reward = 0
         for t in range(env.max_steps):
             action, action_logprob = agent.select_action(state)
@@ -455,23 +555,24 @@ def train_ppo(env, agent, max_episodes=1000):
             memory.rewards.append(reward)
 
             state = next_state
-            episode_reward += reward
+            if t==0:
+                episode_reward += reward
             if done:
                 break
 
         agent.update(memory)
 
         # print(f"Episode {episode}\tLast State: {state}\tReward: {reward}")
-        with open('episode_rewards_attention_2.csv', 'a') as f:
+        with open('episode_rewards_residual_cl_v1_2.csv', 'a') as f:
                 f.write(f"Episode {episode}, Last State: {np.round(state[-3:])}, Reward: {reward}\n")
 
         memory.clear()
         total_rewards.append(episode_reward)
         if episode % 100 == 0:
-            avg_reward = np.mean(total_rewards[-100:])/env.max_steps
+            avg_reward = np.mean(total_rewards[-100:])
             print(f"Episode {episode}\tAverage Reward: {avg_reward:.2f}")
         if episode % 1000 == 0:
-            save_model(agent, "models/attention_policy_"+ str(episode) +".pth", "models/attention_value_"+ str(episode) +".pth")
+            save_model(agent, "models/residual_cl_v1_policy_"+ str(episode) +".pth", "models/residual_cl_v1_value_"+ str(episode) +".pth")
             print("Model saved successfully.")
     return total_rewards
 
@@ -480,68 +581,181 @@ def plot_rewards(rewards, title, pdf_file):
     plt.plot(rewards)
     plt.xlabel('Episode')
     plt.ylabel('Total Reward')
+    plt.xlim(0, len(rewards))
+    # plt.ylim(-1, 1)
     plt.title(title)
     plt.grid(True)
     
     plt.savefig(pdf_file)  
     plt.close()
 
+import csv
+
+import pandas as pd
+
+def plot_threads_csv(threads_file='threads_dicrete_w_history_minibatch_mlp_deepseek_v14.csv', optimals = None, output_file='threads_plot.png'):
+    optimal_read, optimal_network, optimal_write, _ = optimals
+    data = []
+
+    # Read data from threads_dicrete_w_history_minibatch_mlp_deepseek_v14.csv
+    with open(threads_file, 'r') as f:
+        reader = csv.reader(f)
+        for row in reader:
+            if len(row) < 3:
+                continue
+            data.append([float(value) for value in row[:3]])
+
+    df = pd.DataFrame(data, columns=['Read Threads', 'Network Threads', 'Write Threads'])
+
+    # Compute rolling averages
+    rolling_read = df['Read Threads'].rolling(window=15).mean()
+    rolling_network = df['Network Threads'].rolling(window=15).mean()
+    rolling_write = df['Write Threads'].rolling(window=15).mean()
+
+    # Create subplots for each type
+    plt.figure(figsize=(12, 12))
+
+    plt.subplot(3, 1, 1)
+    plt.plot(rolling_read, label='Read Threads (5-point MA)')
+    plt.title('Read Threads (Stable: '+ str(optimal_read) +')')
+    plt.xlabel('Iteration')
+    plt.ylabel('Thread Count')
+    plt.grid(True)
+    plt.legend()
+
+    plt.subplot(3, 1, 2)
+    plt.plot(rolling_network, label='Network Threads (5-point MA)', color='orange')
+    plt.title('Network Threads (Stable: '+ str(optimal_network) +')')
+    plt.xlabel('Iteration')
+    plt.ylabel('Thread Count')
+    plt.grid(True)
+    plt.legend()
+
+    plt.subplot(3, 1, 3)
+    plt.plot(rolling_write, label='Write Threads (5-point MA)', color='green')
+    plt.title('Write Threads (Stable: '+ str(optimal_write) +')')
+    plt.xlabel('Iteration')
+    plt.ylabel('Thread Count')
+    plt.grid(True)
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig(output_file)
+    plt.close()
+    print(f"Saved thread count plot to {output_file}")
+
+    # save average thread count to a file
+    with open('average_threads_dicrete_w_history_minibatch_mlp_deepseek_v14.csv', 'a') as f:
+        f.write(f"optimal: {optimal_read}; Actual: {np.mean(df['Read Threads'])}\n")
+        f.write(f"optimal: {optimal_network}; Actual: {np.mean(df['Network Threads'])}\n")
+        f.write(f"optimal: {optimal_write}; Actual: {np.mean(df['Write Threads'])}\n")
+
+# Function to plot throughputs with rolling averages
+def plot_throughputs_csv(throughputs_file='throughputs_dicrete_w_history_minibatch_mlp_deepseek_v14.csv', optimals = None, output_file='throughputs_plot.png'):
+    optimal_throughput = optimals[-1]
+    data = []
+
+    # Read data from throughputs_dicrete_w_history_minibatch_mlp_deepseek_v14.csv
+    with open(throughputs_file, 'r') as f:
+        reader = csv.reader(f)
+        for row in reader:
+            if len(row) < 3:
+                continue
+            data.append([float(value) for value in row[:3]])
+
+    df = pd.DataFrame(data, columns=['Read Throughput', 'Network Throughput', 'Write Throughput'])
+
+    # Compute rolling averages
+    rolling_read = df['Read Throughput'].rolling(window=15).mean()
+    rolling_network = df['Network Throughput'].rolling(window=15).mean()
+    rolling_write = df['Write Throughput'].rolling(window=15).mean()
+
+    # Create subplots for each type
+    plt.figure(figsize=(12, 12))
+
+    plt.subplot(3, 1, 1)
+    plt.plot(rolling_read, label='Read Throughput')
+    plt.title('Read Throughput (Stable: '+ str(optimal_throughput) +')')
+    plt.xlabel('Iteration')
+    plt.ylabel('Throughput')
+    plt.grid(True)
+    plt.legend()
+
+    plt.subplot(3, 1, 2)
+    plt.plot(rolling_network, label='Network Throughput', color='orange')
+    plt.title('Network Throughput (Stable: '+ str(optimal_throughput) +')')
+    plt.xlabel('Iteration')
+    plt.ylabel('Throughput')
+    plt.grid(True)
+    plt.legend()
+
+    plt.subplot(3, 1, 3)
+    plt.plot(rolling_write, label='Write Throughput', color='green')
+    plt.title('Write Throughput (Stable: '+ str(optimal_throughput) +')')
+    plt.xlabel('Iteration')
+    plt.ylabel('Throughput')
+    plt.grid(True)
+    plt.legend()
+
+    plt.tight_layout()
+    plt.savefig(output_file)
+    plt.close()
+    print(f"Saved throughput plot to {output_file}")
+
+    # save average throughput to a file
+    with open('average_throughput_dicrete_w_history_minibatch_mlp_deepseek_v14.csv', 'a') as f:
+        f.write(f"{np.mean(df['Read Throughput'])}\n")
+        f.write(f"{np.mean(df['Network Throughput'])}\n")
+        f.write(f"{np.mean(df['Write Throughput'])}\n")
+
 import os
-import re
-
-def find_last_policy_model():
-    models = os.listdir("models")
-    models = [model for model in models if re.match(r'attention_policy_\d+\.pth', model)]
-    models.sort(key=lambda x: int(re.search(r'\d+', x).group()))
-    return models[-1]
-
-def find_last_value_model():
-    models = os.listdir("models")
-    models = [model for model in models if re.match(r'attention_value_\d+\.pth', model)]
-    models.sort(key=lambda x: int(re.search(r'\d+', x).group()))
-    return models[-1]
-
-# if __name__ == '__main__':
-#     env = NetworkOptimizationEnv()
-#     agent = PPOAgentContinuous(state_dim=8, action_dim=3, lr=1e-4, eps_clip=0.1)
-#     print("Training PPO agent on Network System Simulator with continuous actions...")
-#     rewards = train_ppo(env, agent, max_episodes=50000)
-
-#     plot_rewards(rewards, 'PPO Training Rewards', 'training_rewards_attention.pdf')
-
-#     env = NetworkOptimizationEnv()
-#     agent = PPOAgentContinuous(state_dim=8, action_dim=3, lr=1e-4, eps_clip=0.1)
-
-#     policy_model = find_last_policy_model()
-#     value_model = find_last_value_model()
-
-#     print(f"Loading model... Value: {value_model}, Policy: {policy_model}")
-#     load_model(agent, "models/"+policy_model, "models/"+value_model)
-#     print("Model loaded successfully.")
-#     rewards = train_ppo(env, agent, max_episodes=1000)
-
-#     plot_rewards(rewards, 'PPO Inference Rewards', 'inference_rewards_attention.pdf')
-
 if __name__ == '__main__':
+    if os.path.exists('threads_residual_cl_v1.csv'):
+        os.remove('threads_residual_cl_v1.csv')
+    if os.path.exists('throughputs_residual_cl_v1.csv'):
+        os.remove('throughputs_residual_cl_v1.csv')
+
     oneGB = 1024
-    simulator = NetworkSystemSimulator(sender_buffer_capacity=6.13 * oneGB,
-                                            receiver_buffer_capacity=1.876 * oneGB,
-                                            read_throughput_per_thread=139,
-                                            network_throughput_per_thread=165,
-                                            write_throughput_per_thread=201,
-                                            read_bandwidth=2432.7,
-                                            write_bandwidth=2080.37,
-                                            network_bandwidth=1169.69,
-                                            track_states=True)
+    simulator_generator = SimulatorGenerator()
+    _, simulator = simulator_generator.generate_simulator(episode=1)
     env = NetworkOptimizationEnv(simulator=simulator)
     agent = PPOAgentContinuous(state_dim=8, action_dim=3, lr=1e-4, eps_clip=0.1)
+    rewards = train_ppo(env, agent, max_episodes=400000)
+    
+    plot_rewards(rewards, 'PPO Training Rewards', 'training_rewards_training_residual_cl_v1.pdf')
 
-    # policy_model = 'attention_policy_50000.pth'
-    # value_model = 'attention_value_50000.pth'
+    inference_count = 5
+    for i in range(inference_count):
+        if os.path.exists('threads_residual_cl_v1.csv'):
+            os.remove('threads_residual_cl_v1.csv')
+        if os.path.exists('throughputs_residual_cl_v1.csv'):
+            os.remove('throughputs_residual_cl_v1.csv')
 
-    # print(f"Loading model... Value: {value_model}, Policy: {policy_model}")
-    # load_model(agent, "models/"+policy_model, "models/"+value_model)
-    # print("Model loaded successfully.")
-    rewards = train_ppo(env, agent, max_episodes=10000)
+        optimals, simulator = simulator_generator.generate_simulator(episode=500000)
 
-    plot_rewards(rewards, 'PPO Inference Rewards', 'inference_rewards_attention_half_2.pdf')
+        # save simulator parameters to a file
+        with open('simulators/simulator_parameters_'+ str(i) +'.csv', 'w') as f:
+            f.write(f"Sender Buffer Capacity, {simulator.sender_buffer_capacity}\n")
+            f.write(f"Receiver Buffer Capacity, {simulator.receiver_buffer_capacity}\n")
+            f.write(f"Read Throughput per Thread, {simulator.read_throughput_per_thread}\n")
+            f.write(f"Network Throughput per Thread, {simulator.network_throughput_per_thread}\n")
+            f.write(f"Write Throughput per Thread, {simulator.write_throughput_per_thread}\n")
+            f.write(f"Read Bandwidth, {simulator.read_bandwidth}\n")
+            f.write(f"Write Bandwidth, {simulator.write_bandwidth}\n")
+            f.write(f"Network Bandwidth, {simulator.network_bandwidth}\n")
+
+        env = NetworkOptimizationEnv(simulator=simulator)
+        agent = PPOAgentContinuous(state_dim=8, action_dim=3, lr=1e-4, eps_clip=0.1)
+
+        policy_model = 'training_residual_cl_v1_policy_400000.pth'
+        value_model = 'training_residual_cl_v1_value_400000.pth'
+
+        print(f"Loading model... Value: {value_model}, Policy: {policy_model}")
+        load_model(agent, "models/"+policy_model, "models/"+value_model)
+        print("Model loaded successfully.")
+
+        rewards = train_ppo(env, agent, max_episodes=100)
+
+        plot_rewards(rewards, 'PPO Inference Rewards', 'rewards/inference_rewards_training_residual_cl_v1_'+ str(i) +'.pdf')
+        plot_threads_csv('threads_residual_cl_v1.csv', optimals, 'threads/inference_threads_plot_training_residual_cl_v1_'+ str(i) +'.png')
+        plot_throughputs_csv('throughputs_residual_cl_v1.csv', optimals, 'throughputs/inference_throughputs_plot_training_residual_cl_v1_'+ str(i) +'.png') 

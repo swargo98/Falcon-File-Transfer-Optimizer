@@ -90,13 +90,13 @@ class NetworkSystemSimulator:
         print(f"Initial Sender Buffer: {self.sender_buffer_in_use}, Receiver Buffer: {self.receiver_buffer_in_use}")
 
 
-        # if self.track_states:
-        #     with open('optimizer_call_level_states.csv', 'w') as f:
-        #         f.write("Read Thread, Network Thread, Write Thread, Utility, Read Throughput, Sender Buffer, Network Throughput, Receiver Buffer, Write Throughput\n")
+        if self.track_states:
+            with open('optimizer_call_level_states.csv', 'w') as f:
+                f.write("Read Thread, Network Thread, Write Thread, Utility, Read Throughput, Sender Buffer, Network Throughput, Receiver Buffer, Write Throughput\n")
 
-        #     with open('thread_level_states.csv', 'w') as f:
-        #         f.write("Thread Type, Throughput, Sender Buffer, Receiver Buffer\n")
-        #         f.write(f"Initial, 0, {self.sender_buffer_in_use}, {self.receiver_buffer_in_use}\n")
+            with open('thread_level_states.csv', 'w') as f:
+                f.write("Thread Type, Throughput, Sender Buffer, Receiver Buffer\n")
+                f.write(f"Initial, 0, {self.sender_buffer_in_use}, {self.receiver_buffer_in_use}\n")
 
     def read_thread_task(self, time):
         throughput_increase = 0
@@ -149,9 +149,9 @@ class NetworkSystemSimulator:
         if next_time < 1:
             self.thread_queue.put((next_time, "write"))
         # print(f"Write Thread: Sender Buffer: {self.sender_buffer_in_use}, Receiver Buffer: {self.receiver_buffer_in_use}")
-        # if throughput_increase > 0 and self.track_states:
-        #     with open('thread_level_states.csv', 'a') as f:
-        #         f.write(f"Write, {throughput_increase}, {self.sender_buffer_in_use}, {self.receiver_buffer_in_use}\n")
+        if throughput_increase > 0 and self.track_states:
+            with open('thread_level_states.csv', 'a') as f:
+                f.write(f"Write, {throughput_increase}, {self.sender_buffer_in_use}, {self.receiver_buffer_in_use}\n")
         return next_time
 
     def get_utility_value_dummy(self, threads):
@@ -203,10 +203,8 @@ class NetworkSystemSimulator:
         # print(f"Read thread: {read_thread}, Network thread: {network_thread}, Write thread: {write_thread}, Utility: {utility}")
 
         if self.track_states:
-            with open('threads_attention.csv', 'a') as f:
-                f.write(f"{read_thread}, {network_thread}, {write_thread}\n")
-            with open('throughputs_attention.csv', 'a') as f:
-                f.write(f"{self.read_throughput}, {self.network_throughput}, {self.write_throughput}\n")
+            with open('optimizer_call_level_states.csv', 'a') as f:
+                f.write(f"{read_thread}, {network_thread}, {write_thread}, {utility}, {self.read_throughput}, {self.sender_buffer_in_use}, {self.network_throughput}, {self.receiver_buffer_in_use}, {self.write_throughput}\n")
 
         final_state = SimulatorState(self.sender_buffer_capacity-self.sender_buffer_in_use,
                                      self.receiver_buffer_capacity-self.receiver_buffer_in_use,
@@ -256,7 +254,7 @@ class NetworkOptimizationEnv(gym.Env):
                                     read_thread=1,
                                     network_thread=1,
                                     write_thread=1)
-        self.max_steps = 10
+        self.max_steps = 100
         self.current_step = 0
 
         # For recording the trajectory
@@ -290,21 +288,20 @@ class NetworkOptimizationEnv(gym.Env):
         return self.state.to_array(), reward, done, {}
 
     def reset(self):
-        self.simulator.read_thread = np.random.randint(3, 19)
-        self.simulator.network_thread = np.random.randint(3, 19)
-        self.simulator.write_thread = np.random.randint(3, 19)
-        sender_buffer_remaining_capacity = self.simulator.sender_buffer_capacity - self.simulator.sender_buffer_in_use
-        receiver_buffer_remaining_capacity = self.simulator.receiver_buffer_capacity - self.simulator.receiver_buffer_in_use
+        oneGB = 1024
 
-        self.state = SimulatorState(
-            sender_buffer_remaining_capacity=sender_buffer_remaining_capacity,
-            receiver_buffer_remaining_capacity=receiver_buffer_remaining_capacity,
-            read_thread=self.simulator.read_thread,
-            network_thread=self.simulator.network_thread,
-            write_thread=self.simulator.write_thread,
-        )
-        
+        initial_read_thread = np.random.randint(self.thread_limits[0], self.thread_limits[1] + 1)
+        initial_network_thread = np.random.randint(self.thread_limits[0], self.thread_limits[1] + 1)
+        initial_write_thread = np.random.randint(self.thread_limits[0], self.thread_limits[1] + 1)
+
+        self.state = SimulatorState(sender_buffer_remaining_capacity=5*oneGB,
+                                    receiver_buffer_remaining_capacity=3*oneGB,
+                                    read_thread=initial_read_thread,
+                                    network_thread=initial_network_thread,
+                                    write_thread=initial_write_thread)
         self.current_step = 0
+        self.simulator.sender_buffer_in_use = 0
+        self.simulator.receiver_buffer_in_use = 0
         self.trajectory = [self.state.copy()]
 
         # Return initial state as NumPy array
@@ -462,13 +459,13 @@ def train_ppo(env, agent, max_episodes=1000):
         agent.update(memory)
 
         # print(f"Episode {episode}\tLast State: {state}\tReward: {reward}")
-        with open('episode_rewards_attention_2.csv', 'a') as f:
+        with open('episode_rewards_attention.csv', 'a') as f:
                 f.write(f"Episode {episode}, Last State: {np.round(state[-3:])}, Reward: {reward}\n")
 
         memory.clear()
         total_rewards.append(episode_reward)
         if episode % 100 == 0:
-            avg_reward = np.mean(total_rewards[-100:])/env.max_steps
+            avg_reward = np.mean(total_rewards[-100:])
             print(f"Episode {episode}\tAverage Reward: {avg_reward:.2f}")
         if episode % 1000 == 0:
             save_model(agent, "models/attention_policy_"+ str(episode) +".pth", "models/attention_value_"+ str(episode) +".pth")
@@ -501,47 +498,19 @@ def find_last_value_model():
     models.sort(key=lambda x: int(re.search(r'\d+', x).group()))
     return models[-1]
 
-# if __name__ == '__main__':
-#     env = NetworkOptimizationEnv()
-#     agent = PPOAgentContinuous(state_dim=8, action_dim=3, lr=1e-4, eps_clip=0.1)
-#     print("Training PPO agent on Network System Simulator with continuous actions...")
-#     rewards = train_ppo(env, agent, max_episodes=50000)
-
-#     plot_rewards(rewards, 'PPO Training Rewards', 'training_rewards_attention.pdf')
-
-#     env = NetworkOptimizationEnv()
-#     agent = PPOAgentContinuous(state_dim=8, action_dim=3, lr=1e-4, eps_clip=0.1)
-
-#     policy_model = find_last_policy_model()
-#     value_model = find_last_value_model()
-
-#     print(f"Loading model... Value: {value_model}, Policy: {policy_model}")
-#     load_model(agent, "models/"+policy_model, "models/"+value_model)
-#     print("Model loaded successfully.")
-#     rewards = train_ppo(env, agent, max_episodes=1000)
-
-#     plot_rewards(rewards, 'PPO Inference Rewards', 'inference_rewards_attention.pdf')
-
 if __name__ == '__main__':
     oneGB = 1024
-    simulator = NetworkSystemSimulator(sender_buffer_capacity=6.13 * oneGB,
-                                            receiver_buffer_capacity=1.876 * oneGB,
-                                            read_throughput_per_thread=139,
-                                            network_throughput_per_thread=165,
-                                            write_throughput_per_thread=201,
-                                            read_bandwidth=2432.7,
-                                            write_bandwidth=2080.37,
-                                            network_bandwidth=1169.69,
-                                            track_states=True)
+    simulator = NetworkSystemSimulator(sender_buffer_capacity=10*oneGB,
+                                                receiver_buffer_capacity=6*oneGB,
+                                                read_throughput_per_thread=200,
+                                                network_throughput_per_thread=150,
+                                                write_throughput_per_thread=70,
+                                                read_bandwidth=12*oneGB,
+                                                write_bandwidth=1400,
+                                                network_bandwidth=2*oneGB)
     env = NetworkOptimizationEnv(simulator=simulator)
     agent = PPOAgentContinuous(state_dim=8, action_dim=3, lr=1e-4, eps_clip=0.1)
+    print("Training PPO agent on Network System Simulator with continuous actions...")
+    rewards = train_ppo(env, agent, max_episodes=50000)
 
-    # policy_model = 'attention_policy_50000.pth'
-    # value_model = 'attention_value_50000.pth'
-
-    # print(f"Loading model... Value: {value_model}, Policy: {policy_model}")
-    # load_model(agent, "models/"+policy_model, "models/"+value_model)
-    # print("Model loaded successfully.")
-    rewards = train_ppo(env, agent, max_episodes=10000)
-
-    plot_rewards(rewards, 'PPO Inference Rewards', 'inference_rewards_attention_half_2.pdf')
+    plot_rewards(rewards, 'PPO Training Rewards', 'training_rewards_attention_full.pdf')
